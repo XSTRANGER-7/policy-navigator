@@ -1,0 +1,54 @@
+{
+  "id": "f2d01a1c-7531-4c67-94df-0321430e936f",
+  "didIdentifier": "did:polygonid:polygon:amoy:2qXsHnvZpNZPFBjkuWmNJrBUenyQDT6PM27ndkgs7a",
+  "did": {
+    "id": "urn:f1a3cc82-8b0c-4bb2-ae5b-36f7d38d32fb",
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://schema.iden3.io/core/jsonld/iden3proofs.jsonld",
+      "https://schema.iden3.io/core/jsonld/auth.jsonld"
+    ],
+    "type": [
+      "VerifiableCredential",
+      "AuthBJJCredential"
+    ],
+    "credentialSubject": {
+      "x": "4480710570163603629085781438658055479579688840113509007613208768418252541779",
+      "y": "573246191021169279247915708760576496721088747387684899993123937924730389628",
+      "type": "AuthBJJCredential"
+    },
+    "issuer": "did:polygonid:polygon:amoy:2qXsHnvZpNZPFBjkuWmNJrBUenyQDT6PM27ndkgs7a",
+    "credentialSchema": {
+      "id": "https://schema.iden3.io/core/json/auth.json",
+      "type": "JsonSchema2023"
+    },
+    "credentialStatus": {
+      "id": "https://rhs-staging.polygonid.me/node?state=a1411a2f28ab590e8457414787c784f6ccb25d9a7cb5eb396fa1f6e417634329",
+      "type": "Iden3ReverseSparseMerkleTreeProof",
+      "revocationNonce": 0
+    },
+    "issuanceDate": "2026-02-21T19:36:23.539Z",
+    "proof": [
+      {
+        "issuerData": {
+          "id": "did:polygonid:polygon:amoy:2qXsHnvZpNZPFBjkuWmNJrBUenyQDT6PM27ndkgs7a",
+          "state": {
+            "rootOfRoots": "0000000000000000000000000000000000000000000000000000000000000000",
+            "revocationTreeRoot": "0000000000000000000000000000000000000000000000000000000000000000",
+            "claimsTreeRoot": "d5112482a1e854354be2c00e7ab1873c0fdcefd03b07d1a5a37b26f761f01129",
+            "value": "a1411a2f28ab590e8457414787c784f6ccb25d9a7cb5eb396fa1f6e417634329"
+          }
+        },
+        "type": "Iden3SparseMerkleTreeProof",
+        "coreClaim": "cca3371a6cb1b715004407e325bd993c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000534f17a0eb27b937ed02e350401e2893de74862a30db4e954069211008fee7097c048584a1be1b4b91f6535fc9dc5b3a4e1bb0158bfadb2e491cd7f9227244010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "mtp": {
+          "existence": true,
+          "siblings": []
+        }
+      }
+    ]
+  },
+  "name": "Eligibility Agent",
+  "description": "Evaluates citizen eligibility for schemes",
+  "seed": "hRNyCpUFbZXRAKh5lJkAkUOXrFdvQNEfvPli9Qrjw8Y="
+}

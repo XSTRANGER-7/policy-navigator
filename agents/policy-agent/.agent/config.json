@@ -1,0 +1,54 @@
+{
+  "id": "a4b14196-782e-4e3d-990b-e0301253d98f",
+  "didIdentifier": "did:polygonid:polygon:amoy:2qSMPXHfYgyt5rr8AYcwZZopBtB5Pe74N5ThtBmgUJ",
+  "did": {
+    "id": "urn:2ee1bd75-404e-43c1-8076-95da59e9b3f2",
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://schema.iden3.io/core/jsonld/iden3proofs.jsonld",
+      "https://schema.iden3.io/core/jsonld/auth.jsonld"
+    ],
+    "type": [
+      "VerifiableCredential",
+      "AuthBJJCredential"
+    ],
+    "credentialSubject": {
+      "x": "414918600004244998997418476086925693650629099106658977247238276784276650713",
+      "y": "18280171624115862229590127846243442864128175685443617566592613672026586658377",
+      "type": "AuthBJJCredential"
+    },
+    "issuer": "did:polygonid:polygon:amoy:2qSMPXHfYgyt5rr8AYcwZZopBtB5Pe74N5ThtBmgUJ",
+    "credentialSchema": {
+      "id": "https://schema.iden3.io/core/json/auth.json",
+      "type": "JsonSchema2023"
+    },
+    "credentialStatus": {
+      "id": "https://rhs-staging.polygonid.me/node?state=10c47648f131da2e0a7cca678846cc9100c812da1d686059378bd26536457b23",
+      "type": "Iden3ReverseSparseMerkleTreeProof",
+      "revocationNonce": 0
+    },
+    "issuanceDate": "2026-02-21T20:14:35.360Z",
+    "proof": [
+      {
+        "issuerData": {
+          "id": "did:polygonid:polygon:amoy:2qSMPXHfYgyt5rr8AYcwZZopBtB5Pe74N5ThtBmgUJ",
+          "state": {
+            "rootOfRoots": "0000000000000000000000000000000000000000000000000000000000000000",
+            "revocationTreeRoot": "0000000000000000000000000000000000000000000000000000000000000000",
+            "claimsTreeRoot": "c9ea4ed5870ae32f85e9b0d0cebafd070e2739106d740b8008e9518c4ef75207",
+            "value": "10c47648f131da2e0a7cca678846cc9100c812da1d686059378bd26536457b23"
+          }
+        },
+        "type": "Iden3SparseMerkleTreeProof",
+        "coreClaim": "cca3371a6cb1b715004407e325bd993c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d93a24d13e1f2bfa33d3b863812d518c35626f0ba67b14b142ed503bead5ea0049b64aff2390a30e1a0b1c3479383456ed8b0cd34ed996150c79e83ce2356a280000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "mtp": {
+          "existence": true,
+          "siblings": []
+        }
+      }
+    ]
+  },
+  "name": "Policy Agent",
+  "description": "Provides structured scheme rules",
+  "seed": "40EyKRjx5nWELHEweJiTU5IVL4vDLnupum3coBGNUso="
+}
