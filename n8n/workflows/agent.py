@@ -5,13 +5,17 @@ import os
 
 load_dotenv()
 
-# Get dynamic port (Render provides this)
+# Get dynamic port from Render
 port = int(os.environ.get("PORT", 5000))
 
-# Configure agent
 config = AgentConfig(
     name="Policy Navigator Agent",
     description="Handles policy eligibility queries",
+    capabilities={
+        "ai": ["nlp"],
+        "protocols": ["http"],
+        "services": ["policy_verification"]
+    },
     mode="webhook",
     webhook_host="0.0.0.0",
     webhook_port=port,
@@ -19,13 +23,11 @@ config = AgentConfig(
     api_key=os.environ.get("ZYND_API_KEY")
 )
 
-# Initialize agent
 agent = ZyndAIAgent(config)
 
 print(f"Agent running with ID: {agent.agent_id}")
 print(f"Webhook URL: {agent.webhook_url}")
 
-# Handle incoming messages
 def message_handler(message: AgentMessage, topic: str):
     print(f"⚡ Message Received: {message.content}")
     agent.set_response(
