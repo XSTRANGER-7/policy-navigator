@@ -2,10 +2,10 @@ from zyndai_agent.agent import AgentConfig, ZyndAIAgent
 from zyndai_agent.message import AgentMessage
 from dotenv import load_dotenv
 import os
+import time
 
 load_dotenv()
 
-# Get dynamic port from Render
 port = int(os.environ.get("PORT", 5000))
 
 config = AgentConfig(
@@ -36,3 +36,7 @@ def message_handler(message: AgentMessage, topic: str):
     )
 
 agent.add_message_handler(message_handler)
+
+# 🔥 KEEP PROCESS ALIVE (REQUIRED FOR RENDER)
+while True:
+    time.sleep(60)
