@@ -1,0 +1,54 @@
+{
+  "id": "d9c00f6e-1943-4403-a4ff-2dca63fcd448",
+  "didIdentifier": "did:polygonid:polygon:amoy:2qb3tkacxGKs9XF6b6uKfGmPsgWeduwu46tXN4sMr4",
+  "did": {
+    "id": "urn:d2abb133-df3e-4370-b850-791185e749f9",
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1",
+      "https://schema.iden3.io/core/jsonld/iden3proofs.jsonld",
+      "https://schema.iden3.io/core/jsonld/auth.jsonld"
+    ],
+    "type": [
+      "VerifiableCredential",
+      "AuthBJJCredential"
+    ],
+    "credentialSubject": {
+      "x": "204846671203131700485664657754523139460213696191045399292628661125766948760",
+      "y": "3485590975495032645513503868516957745903406645302270084092294729169318957606",
+      "type": "AuthBJJCredential"
+    },
+    "issuer": "did:polygonid:polygon:amoy:2qb3tkacxGKs9XF6b6uKfGmPsgWeduwu46tXN4sMr4",
+    "credentialSchema": {
+      "id": "https://schema.iden3.io/core/json/auth.json",
+      "type": "JsonSchema2023"
+    },
+    "credentialStatus": {
+      "id": "https://rhs-staging.polygonid.me/node?state=3b70a00eb3f17556785f8073d689ebddf89aec0e50789ccc0bbc39565f152930",
+      "type": "Iden3ReverseSparseMerkleTreeProof",
+      "revocationNonce": 0
+    },
+    "issuanceDate": "2026-02-21T11:18:07.967Z",
+    "proof": [
+      {
+        "issuerData": {
+          "id": "did:polygonid:polygon:amoy:2qb3tkacxGKs9XF6b6uKfGmPsgWeduwu46tXN4sMr4",
+          "state": {
+            "rootOfRoots": "0000000000000000000000000000000000000000000000000000000000000000",
+            "revocationTreeRoot": "0000000000000000000000000000000000000000000000000000000000000000",
+            "claimsTreeRoot": "6df5a43ae8d39adec7bb878c94e7a449b4c04d6761f24710b5a9600523b9a306",
+            "value": "3b70a00eb3f17556785f8073d689ebddf89aec0e50789ccc0bbc39565f152930"
+          }
+        },
+        "type": "Iden3SparseMerkleTreeProof",
+        "coreClaim": "cca3371a6cb1b715004407e325bd993c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000098a7dfdbedcbe99d9c14447ee420990a514be5261c859fcba718e75369f0730026d2a324949fd1965e4fb16ba281a599651b417c501c73f9da72d2d94ac6b4070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "mtp": {
+          "existence": true,
+          "siblings": []
+        }
+      }
+    ]
+  },
+  "name": "My Simple Agent",
+  "description": "Test agent running workflow",
+  "seed": "N4OgE9H8P9XNZK08pL1UiKDjl42S/Vn9FB9PKn4gPF0="
+}
