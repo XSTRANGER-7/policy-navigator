@@ -9,8 +9,7 @@ export default function Navbar() {
 
   const links = [
     { href: "/eligibility", label: "Citizens" },
-    { href: "/policies", label: "Policies" },
-    { href: "/dashboard", label: "Trust" },
+    { href: "/policies",    label: "Policies"  },
   ];
 
   return (
@@ -39,15 +38,21 @@ export default function Navbar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <div className="hidden sm:block">
           <AgentStatus />
         </div>
+
+        {/* Trust Portal — VC-based authenticity, no login required */}
         <Link
           href="/dashboard"
-          className="bg-white border-2 border-black px-6 py-1.5 rounded-full font-black text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all"
+          className={`flex items-center gap-1.5 border-2 border-black px-4 py-1.5 rounded-full font-black text-xs shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all ${
+            pathname === "/dashboard"
+              ? "bg-black text-[#d9ff00]"
+              : "bg-white text-black"
+          }`}
         >
-          Portal Access
+          <span className="text-sm">🔐</span> Trust Portal
         </Link>
       </div>
     </nav>

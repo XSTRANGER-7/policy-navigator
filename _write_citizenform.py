@@ -1,3 +1,6 @@
+"""Write updated CitizenForm.tsx — run once"""
+
+NEW_CITIZEN_FORM = '''\
 "use client";
 
 import { useState } from "react";
@@ -21,13 +24,12 @@ const PIPELINE_LABELS: Record<string, string> = {
   vc_issuance:        "Credential Agent",
 };
 
-export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?: string } = {}) {
+export default function CitizenForm() {
   const [form, setForm] = useState({
-    email: "", age: "", income: "", state: "", category: defaultCategory,
+    email: "", age: "", income: "", state: "", category: "",
   });
   const [loading, setLoading]     = useState(false);
   const [savedToDB, setSavedToDB] = useState(false);
-  const [citizenId, setCitizenId] = useState<string | null>(null);
   const [result, setResult]       = useState<ResultState>(null);
 
   // Modal state
@@ -40,17 +42,25 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
     setResult(null);
     setSavedToDB(false);
 
-    // Single call: saves citizen + runs pipeline + saves VC — all in /api/agent
+    // 1. Save citizen (best-effort)
+    try {
+      const r = await fetch("/api/citizen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, age: Number(form.age), income: Number(form.income) }),
+      });
+      const d = await r.json();
+      if (!d.error) setSavedToDB(true);
+    } catch { /* Supabase not configured */ }
+
+    // 2. Call agent pipeline
     try {
       const r = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email:    form.email,
-          age:      Number(form.age),
-          income:   Number(form.income),
-          state:    form.state,
-          category: form.category,
+          age: Number(form.age), income: Number(form.income),
+          state: form.state, category: form.category,
         }),
       });
       const d = await r.json();
@@ -58,8 +68,6 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
       if (!r.ok) {
         setResult({ kind: "error", message: d.error || "Agent returned an error" });
       } else {
-        if (d.saved_to_db) setSavedToDB(true);
-        if (d.citizen_id)  setCitizenId(d.citizen_id);
         const resp = d.response;
         if (resp && typeof resp === "object" && "ranked_schemes" in resp) {
           setResult({ kind: "success", data: resp as AgentPipelineResponse });
@@ -179,7 +187,6 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
         <ApplyModal
           scheme={applyScheme}
           citizenData={citizenData}
-          citizenId={citizenId}
           onClose={() => setApplyScheme(null)}
         />
       )}
@@ -278,3 +285,8 @@ function PipelineResults({
     </div>
   );
 }
+'''
+
+with open("web/components/CitizenForm.tsx", "w", encoding="utf-8") as f:
+    f.write(NEW_CITIZEN_FORM)
+print("CitizenForm.tsx written:", len(NEW_CITIZEN_FORM.splitlines()), "lines")

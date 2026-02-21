@@ -1,6 +1,12 @@
 import CitizenForm from "@/components/CitizenForm";
 
-export default function EligibilityPage() {
+export default function EligibilityPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const defaultCategory = typeof searchParams?.category === "string" ? searchParams.category : "";
+
   return (
     <section className="px-6 py-16 md:px-12 max-w-5xl mx-auto">
       {/* Page Header */}
@@ -24,7 +30,7 @@ export default function EligibilityPage() {
       </div>
 
       {/* The Form */}
-      <CitizenForm />
+      <CitizenForm defaultCategory={defaultCategory} />
     </section>
   );
 }

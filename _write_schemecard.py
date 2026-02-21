@@ -1,3 +1,6 @@
+"""Write updated SchemeCard.tsx — run once"""
+
+NEW_SCHEME_CARD = '''\
 "use client";
 
 interface SchemeCardProps {
@@ -113,3 +116,8 @@ export default function SchemeCard({
     </div>
   );
 }
+'''
+
+with open("web/components/SchemeCard.tsx", "w", encoding="utf-8") as f:
+    f.write(NEW_SCHEME_CARD)
+print("SchemeCard.tsx written:", len(NEW_SCHEME_CARD.splitlines()), "lines")
