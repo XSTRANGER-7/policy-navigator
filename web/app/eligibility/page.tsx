@@ -1,11 +1,12 @@
 import CitizenForm from "@/components/CitizenForm";
 
-export default function EligibilityPage({
+export default async function EligibilityPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const defaultCategory = typeof searchParams?.category === "string" ? searchParams.category : "";
+  const params = await (searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>));
+  const defaultCategory = typeof params.category === "string" ? params.category : "";
 
   return (
     <section className="px-6 py-16 md:px-12 max-w-5xl mx-auto">

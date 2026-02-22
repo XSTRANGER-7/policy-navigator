@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 interface Scheme {
@@ -92,7 +92,7 @@ function sourceBadge(source: string | null) {
 
 // â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export default function SchemesPage() {
+function SchemesInner() {
   const router       = useRouter();
   const urlParams    = useSearchParams();
 
@@ -876,11 +876,23 @@ export default function SchemesPage() {
           <p className="font-black text-3xl uppercase tracking-tight text-[#d9ff00]">Government<br />Agency?</p>
           <p className="font-bold text-white/60 mt-2 text-sm">Register your organisation and review citizen applications through the Agency Portal.</p>
           <Link href="/agency" className="mt-5 inline-block bg-[#d9ff00] text-black font-black uppercase px-6 py-3 rounded-full text-sm hover:opacity-80 transition-opacity">
-            Agency Portal â†’
+            Agency Portal →
           </Link>
         </div>
       </div>
 
     </section>
+  );
+}
+
+export default function SchemesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-2xl font-black uppercase animate-pulse">Loading schemes...</div>
+      </div>
+    }>
+      <SchemesInner />
+    </Suspense>
   );
 }
