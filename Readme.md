@@ -5,6 +5,18 @@ Built on [ZyndAI Protocol](https://zynd.ai) with a Next.js 16 frontend, 8 Python
 
 ---
 
+<img width="1920" height="1080" alt="Screenshot (95)" src="https://github.com/user-attachments/assets/2d056f08-81ec-4550-bbbf-f6253b980708" />
+<img width="1920" height="1080" alt="Screenshot (104)" src="https://github.com/user-attachments/assets/ec7d9bef-5e86-456b-930c-99e013f7580a" />
+<img width="1920" height="1080" alt="Screenshot (103)" src="https://github.com/user-attachments/assets/8719e844-720a-4489-97c9-4d0d35cfbd6f" />
+<img width="1920" height="1080" alt="Screenshot (102)" src="https://github.com/user-attachments/assets/016da951-11dc-4fab-871c-1b5eaf4882d6" />
+<img width="1920" height="1080" alt="Screenshot (101)" src="https://github.com/user-attachments/assets/e72489a7-b25f-4bbf-b8a5-6f6cb5e264b9" />
+<img width="1920" height="1080" alt="Screenshot (100)" src="https://github.com/user-attachments/assets/c25c55ec-6996-4b38-96e8-c358f2889a31" />
+<img width="1920" height="1080" alt="Screenshot (99)" src="https://github.com/user-attachments/assets/754912f2-7ad3-4143-9bca-6c549d9c9685" />
+<img width="1920" height="1080" alt="Screenshot (98)" src="https://github.com/user-attachments/assets/8b64c1fb-ff75-4b1b-bf3d-e4fcb75fa1e4" />
+<img width="1920" height="1080" alt="Screenshot (97)" src="https://github.com/user-attachments/assets/e0b86659-98d4-4f87-b775-f3d982666419" />
+<img width="1920" height="1080" alt="Screenshot (96)" src="https://github.com/user-attachments/assets/344c2072-467c-4565-9376-f28621ef3ccd" />
+
+
 ## Table of Contents
 
 1. [Problem](#problem)
