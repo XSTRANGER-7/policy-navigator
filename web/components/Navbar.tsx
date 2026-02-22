@@ -11,6 +11,7 @@ export default function Navbar() {
     { href: "/eligibility",       label: "Citizens" },
     { href: "/schemes",           label: "Schemes"   },
     { href: "/policies",          label: "Policies"  },
+    { href: "/form16",            label: "Form 16"   },
     { href: "/agency",            label: "Agency Portal" },
   ];
 

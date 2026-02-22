@@ -86,6 +86,29 @@ export default function Dashboard() {
       </div>
 
       <CitizenTab />
+
+      {/* Form 16 CTA */}
+      <div className="mt-12 bg-[#d9ff00] border-4 border-black rounded-2xl p-6 flex flex-wrap items-center justify-between gap-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-2xl">📄</span>
+            <p className="font-black uppercase text-lg tracking-tight">Form 16 Assistant</p>
+          </div>
+          <p className="font-bold text-black/60 text-sm max-w-lg">
+            Salaried employee? Calculate your exact tax liability, compare New vs Old regime, verify TDS, and get a step-by-step ITR filing guide — powered by AI.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {["Tax Calculator","Regime Comparison","TDS Mismatch Help","Filing Steps","80C / 80D Guide"].map((f) => (
+              <span key={f} className="text-[9px] bg-black text-[#d9ff00] font-black px-2.5 py-1 rounded-full uppercase">{f}</span>
+            ))}
+          </div>
+        </div>
+        <Link href="/form16"
+          className="bg-black text-[#d9ff00] font-black uppercase px-6 py-3 rounded-full text-sm border-2 border-black hover:opacity-80 transition-opacity whitespace-nowrap shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]">
+          Open Form 16 Assistant →
+        </Link>
+      </div>
+
     </section>
   );
 }

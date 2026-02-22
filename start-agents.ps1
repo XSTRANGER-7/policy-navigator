@@ -14,12 +14,14 @@ if (-not (Test-Path $PYTHON)) {
 
 # ── Agents definition ──────────────────────────────────────
 $AGENTS = @(
-    @{ port=5001; label="Policy Agent";      script="agents/policy-agent/agent.py" },
-    @{ port=5002; label="Eligibility Agent"; script="agents/eligibility-agent/agent.py" },
-    @{ port=5003; label="Matcher Agent";     script="agents/matcher-agent/agent.py" },
-    @{ port=5004; label="Credential Agent";  script="agents/credential-agent/agent.py" },
-    @{ port=5005; label="Apply Agent";       script="agents/apply-agent/agent.py" },
-    @{ port=5000; label="Orchestrator";      script="n8n/workflows/agent.py" }   # start last
+    @{ port=5001; label="Policy Agent";           script="agents/policy-agent/agent.py" },
+    @{ port=5002; label="Eligibility Agent";      script="agents/eligibility-agent/agent.py" },
+    @{ port=5003; label="Matcher Agent";          script="agents/matcher-agent/agent.py" },
+    @{ port=5004; label="Credential Agent";       script="agents/credential-agent/agent.py" },
+    @{ port=5005; label="Apply Agent";            script="agents/apply-agent/agent.py" },
+    @{ port=5006; label="Form 16 Agent";          script="agents/form16-agent/agent.py" },
+    @{ port=5007; label="Form 16 Premium (x402)"; script="agents/form16-premium-agent/agent.py" },
+    @{ port=5000; label="Orchestrator";           script="n8n/workflows/agent.py" }   # start last
 )
 
 Write-Host ""
@@ -29,8 +31,8 @@ Write-Host "======================================================" -ForegroundC
 Write-Host ""
 
 # ── Kill existing processes on agent ports ─────────────────
-Write-Host "Clearing old processes on ports 5000-5005..." -ForegroundColor Yellow
-foreach ($port in 5000..5005) {
+Write-Host "Clearing old processes on ports 5000-5007..." -ForegroundColor Yellow
+foreach ($port in 5000..5007) {
     $pids = (netstat -ano 2>$null | Select-String ":$port " | Select-String "LISTENING") |
                 ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -Unique
     foreach ($pid in $pids) {
