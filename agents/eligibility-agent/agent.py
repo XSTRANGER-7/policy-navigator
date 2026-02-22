@@ -4,10 +4,52 @@ from dotenv import load_dotenv
 from pathlib import Path
 import os, time, json
 
+try:
+    from openai import OpenAI as _OpenAI
+    _openai_available = True
+except ImportError:
+    _openai_available = False
+
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 port = int(os.environ.get("PORT", 5002))
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+_llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
+
+
+def llm_explain_eligibility(citizen: dict, eligible: list, ineligible: list) -> dict:
+    """Generate a personalized natural-language explanation of the eligibility result."""
+    if not _llm:
+        return {}
+    try:
+        scheme_names_ok  = [s["name"] for s in eligible[:5]]
+        scheme_names_fail = [s["name"] for s in ineligible[:3]]
+        fail_reasons     = [r for s in ineligible[:3] for r in s.get("reasons_fail", [])[:1]]
+        prompt = (
+            f"A citizen in India has the following profile:\n"
+            f"  Age: {citizen.get('age')}, Income: Rs.{citizen.get('income'):,}/year, "
+            f"Category: {citizen.get('category')}, State: {citizen.get('state', 'India')}\n\n"
+            f"They ARE eligible for: {', '.join(scheme_names_ok) if scheme_names_ok else 'no schemes'}\n"
+            f"They are NOT eligible for: {', '.join(scheme_names_fail) if scheme_names_fail else 'none checked'}\n"
+            f"Key reasons for ineligibility: {'; '.join(fail_reasons) if fail_reasons else 'N/A'}\n\n"
+            f"Write TWO things in JSON:\n"
+            f"1. \"summary\": 2-3 sentence plain-English explanation of their eligibility result.\n"
+            f"2. \"advice\": 1-2 actionable sentences on what they can do to qualify for more schemes "
+            f"(e.g. document to get, category to register under, age/income boundary tips).\n"
+            f"Return ONLY valid JSON: {{\"summary\": \"...\", \"advice\": \"...\"}}"
+        )
+        resp = _llm.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.4,
+        )
+        raw = resp.choices[0].message.content.strip()
+        return json.loads(raw)
+    except Exception as e:
+        print(f"[Eligibility Agent][LLM] {e}")
+        return {}
 
 config = AgentConfig(
     name="Eligibility Agent",
@@ -105,12 +147,28 @@ def message_handler(message: AgentMessage, topic: str):
 
     results = [check_scheme_eligibility(citizen, s) for s in schemes]
     eligible = [r for r in results if r["eligible"]]
+    ineligible = [r for r in results if not r["eligible"]]
     print(f"[Eligibility Agent] {len(eligible)}/{len(results)} eligible")
 
+    # ── LLM: personalized explanation ────────────────────────────────────────
+    llm_insight = llm_explain_eligibility(citizen, eligible, ineligible)
+    if llm_insight:
+        print(f"[Eligibility Agent] LLM insight generated")
+
     if return_all:
-        agent.set_response(message.message_id, json.dumps(results))
+        payload = {
+            "all_evaluated": results,
+            "llm_summary":   llm_insight.get("summary", ""),
+            "llm_advice":    llm_insight.get("advice", ""),
+        }
+        agent.set_response(message.message_id, json.dumps(payload))
     else:
-        agent.set_response(message.message_id, json.dumps(eligible))
+        payload = {
+            "eligible":    eligible,
+            "llm_summary": llm_insight.get("summary", ""),
+            "llm_advice":  llm_insight.get("advice", ""),
+        }
+        agent.set_response(message.message_id, json.dumps(payload))
 
 
 agent.add_message_handler(message_handler)

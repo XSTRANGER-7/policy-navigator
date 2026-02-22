@@ -13,7 +13,7 @@ Actions handled via metadata.action:
   two_employers    — Handling two Form 16s in the same FY
   download_guide   — How to download Form 16 from TRACES portal
   hra_exempt       — Calculate HRA exemption
-  query            — Free-text FAQ (rule-based keyword matching)
+  query            — Free-text FAQ (LLM-powered Indian income tax expert)
 """
 
 from zyndai_agent.agent import AgentConfig, ZyndAIAgent
@@ -22,10 +22,18 @@ from dotenv import load_dotenv
 from pathlib import Path
 import os, json, time, math
 
+try:
+    from openai import OpenAI as _OpenAI
+    _openai_available = True
+except ImportError:
+    _openai_available = False
+
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 port = int(os.environ.get("PORT", 5006))
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+_llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
 
 config = AgentConfig(
     name="Form 16 Agent",
@@ -444,6 +452,34 @@ def extract_payload(content) -> dict:
 
 
 def handle_query(text: str) -> str:
+    """LLM-powered Indian income tax expert. Falls back to keyword matching if no API key."""
+    if _llm:
+        try:
+            resp = _llm.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an expert Indian income tax advisor specializing in Form 16, "
+                            "TDS, ITR filing for salaried employees, and all sections of the "
+                            "Income Tax Act 1961. You know FY 2024-25 rules, new vs old regime, "
+                            "Section 80C/80D/87A/HRA/NPS, TRACES portal, Form 26AS, and AIS. "
+                            "Give accurate, practical answers. Be concise (3-5 sentences max). "
+                            "Always mention relevant section numbers or form names when applicable."
+                        ),
+                    },
+                    {"role": "user", "content": text},
+                ],
+                max_tokens=300,
+                temperature=0.3,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[Form 16 Agent][LLM] {e}")
+            # fall through to keyword matching
+
+    # ── Keyword fallback (no API key or LLM error) ────────────────────────
     text_l = text.lower()
     for keyword, answer in FAQ.items():
         if keyword in text_l:

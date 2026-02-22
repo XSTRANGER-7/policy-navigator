@@ -4,10 +4,43 @@ from dotenv import load_dotenv
 from pathlib import Path
 import os, time, json
 
+try:
+    from openai import OpenAI as _OpenAI
+    _openai_available = True
+except ImportError:
+    _openai_available = False
+
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 port = int(os.environ.get("PORT", 5003))
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+_llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
+
+
+def llm_why_scheme(citizen: dict, scheme: dict) -> str:
+    """Generate a 1-sentence personal reason why this scheme suits this citizen."""
+    if not _llm:
+        return ""
+    try:
+        prompt = (
+            f"Citizen: age {citizen.get('age')}, income Rs.{citizen.get('income'):,}/yr, "
+            f"category '{citizen.get('category')}', state '{citizen.get('state', 'India')}'.\n"
+            f"Scheme: '{scheme.get('name')}' — {scheme.get('description', '')}\n"
+            f"Benefits: {scheme.get('benefits', '')}\n\n"
+            f"Write exactly ONE plain-English sentence explaining why THIS scheme is a strong match "
+            f"for THIS specific citizen. Be specific about their profile. No preamble."
+        )
+        resp = _llm.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0.5,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[Matcher Agent][LLM] {e}")
+        return ""
 
 config = AgentConfig(
     name="Matcher Agent",
@@ -84,6 +117,12 @@ def message_handler(message: AgentMessage, topic: str):
     ranked = sorted(scored, key=lambda x: x.get("relevance_score", 0), reverse=True)
     for i, s in enumerate(ranked):
         s["rank"] = i + 1
+
+    # ── LLM: "why this scheme fits you" for top 5 ──────────────────────────
+    for s in ranked[:5]:
+        why = llm_why_scheme(citizen, s)
+        if why:
+            s["llm_why"] = why
 
     print(f"  => Ranked {len(ranked)} schemes")
     agent.set_response(message.message_id, json.dumps(ranked))
