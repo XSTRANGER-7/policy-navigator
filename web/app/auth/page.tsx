@@ -12,7 +12,6 @@ export default function AuthPage() {
   const [email, setEmail]           = useState("");
   const [password, setPassword]     = useState("");
   const [fullName, setFullName]     = useState("");
-  const [role, setRole]             = useState<"citizen" | "agency">("citizen");
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState("");
   const [success, setSuccess]       = useState("");
@@ -28,7 +27,7 @@ export default function AuthPage() {
       if (r.error) setError(r.error);
       else router.push("/eligibility");
     } else {
-      const r = await signUp(email, password, role, fullName);
+      const r = await signUp(email, password, "citizen", fullName);
       if (r.error) setError(r.error);
       else setSuccess("Account created! Check your email to confirm, then sign in.");
     }
@@ -85,32 +84,16 @@ export default function AuthPage() {
                 />
               </div>
 
-              {/* Role selector */}
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-black/50 mb-1.5">
-                  I am a…
-                </label>
-                <div className="flex gap-3">
-                  {(["citizen", "agency"] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRole(r)}
-                      className={`flex-1 py-3 rounded-xl border-3 border-black font-black uppercase text-xs transition-all ${
-                        role === r
-                          ? "bg-[#d9ff00] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                          : "bg-white hover:bg-black/5"
-                      }`}
-                    >
-                      {r === "citizen" ? "👤 Citizen" : "🏛 Agency / NGO"}
-                    </button>
-                  ))}
+              {/* Agency redirect notice */}
+              <div className="bg-black/5 border-2 border-black/20 rounded-xl p-3 flex items-center gap-3">
+                <span className="text-xl">🏛</span>
+                <div className="flex-1">
+                  <p className="font-black text-xs uppercase">For Government Agencies / NGOs</p>
+                  <p className="text-[10px] font-bold text-black/50">Use the dedicated Agency Portal to register your organisation.</p>
                 </div>
-                <p className="text-[10px] font-bold text-black/40 mt-1">
-                  {role === "agency"
-                    ? "Agencies can manage and review applications"
-                    : "Citizens can check eligibility and apply for schemes"}
-                </p>
+                <a href="/agency" className="text-[10px] font-black uppercase bg-black text-[#d9ff00] px-3 py-1.5 rounded-full whitespace-nowrap hover:opacity-80">
+                  Agency Portal →
+                </a>
               </div>
             </>
           )}

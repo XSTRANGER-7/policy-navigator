@@ -73,16 +73,18 @@ export async function POST(req: Request) {
     }
 
     const pipelineData = result.response;
+    const pipelineObj  = pipelineData as unknown as Record<string, unknown>;
 
     // ── 3. Persist VC + eligibility to `credentials` table ────────────────
     if (supabaseConfigured && pipelineData && typeof pipelineData === "object") {
-      const vc             = (pipelineData as Record<string, unknown>).vc;
-      const rankedSchemes  = (pipelineData as Record<string, unknown>).ranked_schemes ?? [];
-      const totalEligible  = (pipelineData as Record<string, unknown>).total_eligible ?? 0;
-      const citizenDid     = (vc as Record<string, unknown>)?.credentialSubject
-        ? ((vc as Record<string, unknown>).credentialSubject as Record<string, unknown>)?.id as string
+      const vc             = pipelineObj.vc;
+      const rankedSchemes  = pipelineObj.ranked_schemes ?? [];
+      const totalEligible  = pipelineObj.total_eligible ?? 0;
+      const vcObj          = vc as Record<string, unknown> | null | undefined;
+      const citizenDid     = vcObj?.credentialSubject
+        ? ((vcObj.credentialSubject as Record<string, unknown>)?.id as string)
         : null;
-      const expiresAt      = (vc as Record<string, unknown>)?.expirationDate as string ?? null;
+      const expiresAt      = vcObj?.expirationDate as string ?? null;
 
       if (vc) {
         try {
@@ -99,6 +101,14 @@ export async function POST(req: Request) {
           await supabaseServer
             .from("credentials")
             .insert([credRow]);
+
+          // Mark citizen as verified
+          if (citizenId) {
+            await supabaseServer
+              .from("citizens")
+              .update({ verified: true, verified_at: new Date().toISOString() })
+              .eq("id", citizenId);
+          }
         } catch (e) {
           console.warn("Supabase credentials save skipped:", e);
         }

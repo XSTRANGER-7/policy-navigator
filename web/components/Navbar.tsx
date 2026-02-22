@@ -8,8 +8,9 @@ export default function Navbar() {
   const pathname = usePathname();
 
   const links = [
-    { href: "/eligibility", label: "Citizens" },
-    { href: "/policies",    label: "Policies"  },
+    { href: "/eligibility",       label: "Citizens" },
+    { href: "/policies",          label: "Policies"  },
+    { href: "/agency",            label: "Agency Portal" },
   ];
 
   return (

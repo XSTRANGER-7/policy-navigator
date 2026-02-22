@@ -37,7 +37,35 @@ create trigger on_auth_user_created
   for each row execute procedure handle_new_user();
 
 
--- 2. Government Schemes (sourced from Policy Agent data)
+-- 2. Agencies (organisations that review citizen applications)
+create table if not exists agencies (
+  id              uuid primary key default gen_random_uuid(),
+  agency_id       text unique not null,          -- human-readable e.g. AGY-A1B2C3D4
+  org_name        text not null,
+  org_type        text not null
+                    check (org_type in ('Government Body','Ministry','Department','NGO','Municipal Corporation','District Office','Other')),
+  state           text not null,
+  reg_number      text,
+  contact_person  text not null,
+  email           text unique not null,
+  purpose         text,
+  status          text not null default 'active'
+                    check (status in ('pending','active','suspended')),
+  created_at      timestamptz default now()
+);
+
+create index if not exists agencies_email_idx on agencies(email);
+create index if not exists agencies_agency_id_idx on agencies(agency_id);
+
+-- RLS for agencies
+alter table agencies enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where tablename = 'agencies' and policyname = 'Service: full access agencies') then
+    create policy "Service: full access agencies" on agencies for all using (auth.role() = 'service_role');
+  end if;
+end $$;
+
+-- 3. Government Schemes (sourced from Policy Agent data)
 -- Drop and recreate if id column is wrong type (uuid vs text)
 do $$ begin
   if exists (
@@ -95,6 +123,8 @@ create table if not exists citizens (
   income      numeric,
   state       text,
   category    text,
+  verified    boolean not null default false,
+  verified_at timestamptz,
   created_at  timestamptz default now()
 );
 
@@ -111,6 +141,12 @@ do $$ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_name='citizens' and column_name='category') then
     alter table citizens add column category text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='citizens' and column_name='verified') then
+    alter table citizens add column verified boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='citizens' and column_name='verified_at') then
+    alter table citizens add column verified_at timestamptz;
   end if;
 end $$;
 
