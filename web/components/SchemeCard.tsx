@@ -1,5 +1,22 @@
 "use client";
 
+const STATUS_BADGE_MAP: Record<string, { label: string; cls: string }> = {
+  started:             { label: "Started",        cls: "bg-gray-100 text-gray-600 border-gray-300" },
+  documents_submitted: { label: "Docs Submitted", cls: "bg-blue-100 text-blue-700 border-blue-300" },
+  under_review:        { label: "Under Review",   cls: "bg-yellow-100 text-yellow-800 border-yellow-400" },
+  approved:            { label: "Approved ✓",     cls: "bg-green-100 text-green-700 border-green-400" },
+  rejected:            { label: "Rejected",       cls: "bg-red-100 text-red-700 border-red-300" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const b = STATUS_BADGE_MAP[status] ?? { label: status, cls: "bg-gray-100 text-gray-600 border-gray-200" };
+  return (
+    <span className={`text-[9px] font-black uppercase px-2 py-1 border-2 rounded-full ${b.cls}`}>
+      {b.label}
+    </span>
+  );
+}
+
 interface SchemeCardProps {
   name: string;
   description?: string;
@@ -9,6 +26,8 @@ interface SchemeCardProps {
   score?: number;
   reasons?: string[];
   isPartialMatch?: boolean;
+  isApplied?: boolean;
+  applicationStatus?: string;
   onDetails?: () => void;
   onApply?: () => void;
 }
@@ -22,6 +41,8 @@ export default function SchemeCard({
   score,
   reasons,
   isPartialMatch = false,
+  isApplied = false,
+  applicationStatus,
   onDetails,
   onApply,
 }: SchemeCardProps) {
@@ -83,8 +104,8 @@ export default function SchemeCard({
           )}
 
           {/* Action buttons */}
-          {(onDetails || onApply) && (
-            <div className="mt-4 flex gap-2 flex-wrap">
+          {(onDetails || onApply || isApplied) && (
+            <div className="mt-4 flex gap-2 flex-wrap items-center">
               {onDetails && (
                 <button
                   onClick={onDetails}
@@ -93,18 +114,31 @@ export default function SchemeCard({
                   View Details
                 </button>
               )}
-              {onApply && !isPartialMatch && (
-                <button
-                  onClick={onApply}
-                  className="text-[10px] font-black uppercase px-3 py-1.5 bg-black text-[#d9ff00] border-2 border-black rounded-full hover:bg-black/70 transition-colors"
-                >
-                  Apply Now →
-                </button>
-              )}
-              {isPartialMatch && (
-                <span className="text-[9px] font-black uppercase px-2 py-1 bg-orange-100 border border-orange-300 text-orange-700 rounded-full">
-                  Near Match
-                </span>
+              {isApplied ? (
+                <>
+                  <span className="text-[10px] font-black uppercase px-3 py-1.5 bg-[#d9ff00] border-2 border-black text-black rounded-full flex items-center gap-1">
+                    ✓ Applied
+                  </span>
+                  {applicationStatus && (
+                    <StatusBadge status={applicationStatus} />
+                  )}
+                </>
+              ) : (
+                <>
+                  {onApply && !isPartialMatch && (
+                    <button
+                      onClick={onApply}
+                      className="text-[10px] font-black uppercase px-3 py-1.5 bg-black text-[#d9ff00] border-2 border-black rounded-full hover:bg-black/70 transition-colors"
+                    >
+                      Apply Now →
+                    </button>
+                  )}
+                  {isPartialMatch && (
+                    <span className="text-[9px] font-black uppercase px-2 py-1 bg-orange-100 border border-orange-300 text-orange-700 rounded-full">
+                      Near Match
+                    </span>
+                  )}
+                </>
               )}
             </div>
           )}

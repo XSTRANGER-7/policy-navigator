@@ -22,8 +22,9 @@ export async function POST(req: Request) {
     }
 
     // ── 1. Persist citizen profile ────────────────────────────────────────
-    let citizenId: string | null = null;
-    let savedToDB = false;
+    let citizenId:  string | null = null;
+    let savedToDB   = false;
+    let verifiedOk  = false;
 
     if (supabaseConfigured && email) {
       try {
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
               .from("citizens")
               .update({ verified: true, verified_at: new Date().toISOString() })
               .eq("id", citizenId);
+            verifiedOk = true;
           }
         } catch (e) {
           console.warn("Supabase credentials save skipped:", e);
@@ -117,10 +119,11 @@ export async function POST(req: Request) {
 
     // ── 4. Return to frontend ─────────────────────────────────────────────
     return NextResponse.json({
-      status:    "success",
-      citizen_id: citizenId,
+      status:      "success",
+      citizen_id:  citizenId,
       saved_to_db: savedToDB,
-      response:  pipelineData,
+      verified:    verifiedOk,
+      response:    pipelineData,
     });
 
   } catch (err: unknown) {

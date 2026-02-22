@@ -28,7 +28,10 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
   const [loading, setLoading]     = useState(false);
   const [savedToDB, setSavedToDB] = useState(false);
   const [citizenId, setCitizenId] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
   const [result, setResult]       = useState<ResultState>(null);
+  const [appliedSchemes, setAppliedSchemes] = useState<Record<string, { application_id: string; scheme_name: string; status: string; submitted_at?: string }>>({});
+  const [appsRefreshing, setAppsRefreshing] = useState(false);
 
   // Modal state
   const [detailScheme, setDetailScheme] = useState<RankedScheme | null>(null);
@@ -60,6 +63,7 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
       } else {
         if (d.saved_to_db) setSavedToDB(true);
         if (d.citizen_id)  setCitizenId(d.citizen_id);
+        if (d.verified)    setIsVerified(true);
         const resp = d.response;
         if (resp && typeof resp === "object" && "ranked_schemes" in resp) {
           setResult({ kind: "success", data: resp as AgentPipelineResponse });
@@ -74,6 +78,34 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
     }
 
     setLoading(false);
+  }
+
+  function handleApplied(applicationId: string, schemeId: string, schemeName: string) {
+    setAppliedSchemes((prev) => ({
+      ...prev,
+      [schemeId]: { application_id: applicationId, scheme_name: schemeName, status: "started", submitted_at: new Date().toISOString() },
+    }));
+  }
+
+  async function refreshApps() {
+    if (!citizenId) return;
+    setAppsRefreshing(true);
+    try {
+      const r = await fetch(`/api/applications?citizenId=${citizenId}`);
+      const d = await r.json();
+      if (d.applications) {
+        setAppliedSchemes((prev) => {
+          const next = { ...prev };
+          (d.applications as Array<{ id: string; scheme_id: string; scheme_name: string; status: string; submitted_at: string }>).forEach((app) => {
+            if (app.scheme_id) {
+              next[app.scheme_id] = { application_id: app.id, scheme_name: app.scheme_name, status: app.status, submitted_at: app.submitted_at };
+            }
+          });
+          return next;
+        });
+      }
+    } catch { /* ignore */ }
+    setAppsRefreshing(false);
   }
 
   const citizenData = {
@@ -143,8 +175,12 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
         <PipelineResults
           data={result.data}
           savedToDB={savedToDB}
+          isVerified={isVerified}
+          appliedSchemes={appliedSchemes}
+          appsRefreshing={appsRefreshing}
           onViewDetails={(s) => setDetailScheme(s)}
           onApply={(s) => setApplyScheme(s)}
+          onRefreshApps={refreshApps}
         />
       )}
 
@@ -181,6 +217,7 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
           citizenData={citizenData}
           citizenId={citizenId}
           onClose={() => setApplyScheme(null)}
+          onApplied={handleApplied}
         />
       )}
     </div>
@@ -191,13 +228,21 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
 function PipelineResults({
   data,
   savedToDB,
+  isVerified,
+  appliedSchemes,
+  appsRefreshing,
   onViewDetails,
   onApply,
+  onRefreshApps,
 }: {
   data: AgentPipelineResponse;
   savedToDB: boolean;
+  isVerified: boolean;
+  appliedSchemes: Record<string, { application_id: string; scheme_name: string; status: string; submitted_at?: string }>;
+  appsRefreshing: boolean;
   onViewDetails: (s: RankedScheme) => void;
   onApply: (s: RankedScheme) => void;
+  onRefreshApps: () => void;
 }) {
   const { summary, ranked_schemes, pipeline, vc, total_eligible, partial_matches } = data;
   const isPartial = partial_matches === true || total_eligible === 0;
@@ -249,6 +294,20 @@ function PipelineResults({
           <h4 className="text-xs font-black uppercase tracking-widest text-black/40 mb-4">
             {isPartial ? "Nearest Partial Matches" : "Eligible Schemes — Ranked by Relevance"}
           </h4>
+          {/* Identity gate */}
+          {!isVerified && (
+            <div className="flex items-start gap-3 bg-[#ff5c8d] border-4 border-black rounded-2xl p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-2">
+              <span className="text-2xl mt-0.5">🔒</span>
+              <div>
+                <p className="font-black uppercase text-sm">Identity Not Verified</p>
+                <p className="text-xs font-bold text-black/70 mt-0.5">
+                  Your Verifiable Credential could not be saved (agents may be offline). You must verify your identity before applying.
+                  Re-submit the form when all agents are running to get verified.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             {(ranked_schemes as RankedScheme[]).map((scheme: RankedScheme) => (
               <SchemeCard
@@ -261,8 +320,10 @@ function PipelineResults({
                 score={scheme.relevance_score}
                 reasons={scheme.reasons_pass}
                 isPartialMatch={isPartial || !scheme.eligible}
+                isApplied={!!appliedSchemes[scheme.scheme_id]}
+                applicationStatus={appliedSchemes[scheme.scheme_id]?.status}
                 onDetails={() => onViewDetails(scheme)}
-                onApply={scheme.eligible ? () => onApply(scheme) : undefined}
+                onApply={(scheme.eligible && isVerified && !appliedSchemes[scheme.scheme_id]) ? () => onApply(scheme) : undefined}
               />
             ))}
           </div>
@@ -275,6 +336,78 @@ function PipelineResults({
 
       {/* VC Badge */}
       {vc && !isPartial && <VCBadge vc={vc} />}
+
+      {/* My Applications Panel */}
+      <MyApplicationsPanel
+        apps={Object.values(appliedSchemes)}
+        loading={appsRefreshing}
+        onRefresh={onRefreshApps}
+      />
+    </div>
+  );
+}
+
+// ── Sub-component: My Applications tracker ───────────────────────────────────
+const STATUS_BADGE_PANEL: Record<string, { label: string; cls: string }> = {
+  started:             { label: "Started",        cls: "bg-gray-100 text-gray-600 border-gray-300" },
+  documents_submitted: { label: "Docs Submitted", cls: "bg-blue-100 text-blue-700 border-blue-300" },
+  under_review:        { label: "Under Review",   cls: "bg-yellow-100 text-yellow-800 border-yellow-400" },
+  approved:            { label: "Approved ✓",     cls: "bg-green-100 text-green-700 border-green-400" },
+  rejected:            { label: "Rejected",       cls: "bg-red-100 text-red-700 border-red-300" },
+};
+
+function MyApplicationsPanel({
+  apps,
+  loading,
+  onRefresh,
+}: {
+  apps: { application_id: string; scheme_name: string; status: string; submitted_at?: string }[];
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  if (apps.length === 0) return null;
+
+  return (
+    <div className="mt-8 border-4 border-black rounded-2xl overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+      {/* Header */}
+      <div className="bg-black px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[#d9ff00] text-base">📋</span>
+          <h3 className="font-black uppercase text-[#d9ff00] text-sm tracking-wider">My Applications</h3>
+          <span className="bg-[#d9ff00] text-black text-[10px] font-black px-2 py-0.5 rounded-full">{apps.length}</span>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="text-[10px] uppercase font-black text-[#d9ff00] bg-[#d9ff00]/10 border border-[#d9ff00]/30 px-3 py-1 rounded-full hover:bg-[#d9ff00]/20 transition-colors disabled:opacity-40"
+        >
+          {loading ? "Refreshing…" : "↻ Refresh Status"}
+        </button>
+      </div>
+
+      {/* Application rows */}
+      <div className="bg-white divide-y-2 divide-black/10">
+        {apps.map((app) => {
+          const badge = STATUS_BADGE_PANEL[app.status] ?? { label: app.status, cls: "bg-gray-100 text-gray-600 border-gray-200" };
+          const dateStr = app.submitted_at
+            ? new Date(app.submitted_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+            : null;
+          return (
+            <div key={app.application_id} className="px-5 py-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-sm uppercase tracking-tight truncate">{app.scheme_name}</p>
+                <p className="font-mono text-[10px] text-black/40 mt-0.5">
+                  ID: {String(app.application_id).toUpperCase().slice(0, 18)}
+                  {dateStr && <span className="ml-2 text-black/30">· {dateStr}</span>}
+                </p>
+              </div>
+              <span className={`text-[10px] font-black uppercase border-2 px-2.5 py-1 rounded-full flex-shrink-0 ${badge.cls}`}>
+                {badge.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

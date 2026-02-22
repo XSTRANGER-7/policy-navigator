@@ -69,6 +69,21 @@ export async function POST(req: Request) {
         );
       }
 
+      // 0. Verify citizen identity before allowing application
+      if (body.citizen_id && supabaseConfigured) {
+        const { data: citizen } = await supabaseServer
+          .from("citizens")
+          .select("verified")
+          .eq("id", body.citizen_id)
+          .maybeSingle();
+        if (citizen && !citizen.verified) {
+          return NextResponse.json(
+            { error: "Identity not verified. Please complete the eligibility check with all agents running to get your Verifiable Credential, then try again." },
+            { status: 403 },
+          );
+        }
+      }
+
       // 1. Call agent for validation + next_steps
       const agentResult = await callApplyAgent(body);
       const agentData = agentResult.ok ? agentResult.data : null;
