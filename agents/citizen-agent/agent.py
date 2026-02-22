@@ -9,11 +9,14 @@ env_path = Path(__file__).resolve().parent.parent.parent / "agents" / ".env"
 load_dotenv(dotenv_path=env_path, override=False)
 load_dotenv(override=False)
 
-port                   = int(os.environ.get("PORT",                   5000))
-POLICY_AGENT_PORT      = int(os.environ.get("POLICY_AGENT_PORT",      5001))
-ELIGIBILITY_AGENT_PORT = int(os.environ.get("ELIGIBILITY_AGENT_PORT", 5002))
-MATCHER_AGENT_PORT     = int(os.environ.get("MATCHER_AGENT_PORT",     5003))
-CREDENTIAL_AGENT_PORT  = int(os.environ.get("CREDENTIAL_AGENT_PORT",  5004))
+port = int(os.environ.get("PORT", 5000))
+
+# On Railway: set these to the public Railway service URLs.
+# Locally: defaults to localhost ports.
+POLICY_AGENT_URL      = os.environ.get("POLICY_AGENT_URL",      "http://localhost:5001")
+ELIGIBILITY_AGENT_URL = os.environ.get("ELIGIBILITY_AGENT_URL", "http://localhost:5002")
+MATCHER_AGENT_URL     = os.environ.get("MATCHER_AGENT_URL",     "http://localhost:5003")
+CREDENTIAL_AGENT_URL  = os.environ.get("CREDENTIAL_AGENT_URL",  "http://localhost:5004")
 
 config = AgentConfig(
     name="Citizen Agent",
@@ -27,8 +30,8 @@ agent = ZyndAIAgent(config)
 print(f"[Citizen Agent / Orchestrator] Running on port {port}")
 
 
-def call_sub_agent(port_num: int, data: dict, timeout: int = 25) -> any:
-    url = f"http://localhost:{port_num}/webhook/sync"
+def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
+    url = base_url.rstrip("/") + "/webhook/sync"
     try:
         resp = requests.post(url, json={"prompt": json.dumps(data), "sender_id": agent.agent_id, "message_type": "query", "metadata": data}, timeout=timeout)
         resp.raise_for_status()
@@ -41,8 +44,8 @@ def call_sub_agent(port_num: int, data: dict, timeout: int = 25) -> any:
                 return response
         return response
     except requests.exceptions.ConnectionError:
-        print(f"  [!] Agent on port {port_num} is unreachable")
-        return {"error": f"Agent on port {port_num} unreachable"}
+        print(f"  [!] Agent at {url} is unreachable")
+        return {"error": f"Agent at {url} unreachable"}
     except Exception as exc:
         print(f"  [!] Sub-agent call failed: {exc}")
         return {"error": str(exc)}
@@ -79,14 +82,14 @@ def message_handler(message: AgentMessage, topic: str):
 
     # Step 1 — Fetch all schemes
     print("  [1/4] Fetching schemes from Policy Agent...")
-    raw_schemes = call_sub_agent(POLICY_AGENT_PORT, {"request": "get_all_schemes"})
+    raw_schemes = call_sub_agent(POLICY_AGENT_URL, {"request": "get_all_schemes"})
     schemes = raw_schemes if isinstance(raw_schemes, list) else raw_schemes.get("schemes", [])
     pipeline.append({"step": "policy_fetch", "count": len(schemes), "ok": bool(schemes)})
     print(f"        Got {len(schemes)} schemes")
 
     # Step 2 — Evaluate eligibility (returns ALL schemes with eligible flag)
     print("  [2/4] Checking eligibility...")
-    raw_all = call_sub_agent(ELIGIBILITY_AGENT_PORT, {"citizen": citizen, "schemes": schemes, "return_all": True})
+    raw_all = call_sub_agent(ELIGIBILITY_AGENT_URL, {"citizen": citizen, "schemes": schemes, "return_all": True})
     all_evaluated = raw_all if isinstance(raw_all, list) else raw_all.get("all_evaluated", raw_all.get("eligible", []))
     eligible_schemes  = [s for s in all_evaluated if s.get("eligible")]
     partial_schemes   = sorted([s for s in all_evaluated if not s.get("eligible")], key=lambda x: x.get("match_score", 0), reverse=True)
@@ -99,7 +102,7 @@ def message_handler(message: AgentMessage, topic: str):
 
     # Step 3 — Rank
     print("  [3/4] Ranking schemes...")
-    raw_ranked = call_sub_agent(MATCHER_AGENT_PORT, {"citizen": citizen, "eligible_schemes": schemes_to_rank})
+    raw_ranked = call_sub_agent(MATCHER_AGENT_URL, {"citizen": citizen, "eligible_schemes": schemes_to_rank})
     ranked_schemes = raw_ranked if isinstance(raw_ranked, list) else raw_ranked.get("ranked", [])
     pipeline.append({"step": "scheme_ranking", "count": len(ranked_schemes), "ok": bool(ranked_schemes)})
     print(f"        Ranked: {len(ranked_schemes)}")
@@ -108,7 +111,7 @@ def message_handler(message: AgentMessage, topic: str):
     vc = None
     if eligible_schemes:
         print("  [4/4] Issuing Verifiable Credential...")
-        raw_vc = call_sub_agent(CREDENTIAL_AGENT_PORT, {"citizen": citizen, "eligible_schemes": eligible_schemes})
+        raw_vc = call_sub_agent(CREDENTIAL_AGENT_URL, {"citizen": citizen, "eligible_schemes": eligible_schemes})
         vc = raw_vc if isinstance(raw_vc, dict) and "credentialSubject" in raw_vc else raw_vc.get("vc") if isinstance(raw_vc, dict) else None
         pipeline.append({"step": "vc_issuance", "count": None, "ok": vc is not None})
     else:
