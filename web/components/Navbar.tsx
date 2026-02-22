@@ -9,6 +9,7 @@ export default function Navbar() {
 
   const links = [
     { href: "/eligibility",       label: "Citizens" },
+    { href: "/schemes",           label: "Schemes"   },
     { href: "/policies",          label: "Policies"  },
     { href: "/agency",            label: "Agency Portal" },
   ];

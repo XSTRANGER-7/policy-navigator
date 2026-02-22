@@ -87,6 +87,9 @@ create table if not exists schemes (
   rules           jsonb not null default '{}',
   ministry        text,
   official_url    text,
+  source          text default 'builtin',
+  state_specific  boolean not null default false,
+  scraped_at      timestamptz,
   is_active       boolean not null default true,
   created_at      timestamptz default now()
 );
@@ -110,6 +113,16 @@ do $$ begin
   end if;
   if not exists (select 1 from information_schema.columns where table_name='schemes' and column_name='rules') then
     alter table schemes add column rules jsonb not null default '{}';
+  end if;
+  -- New columns for scraper
+  if not exists (select 1 from information_schema.columns where table_name='schemes' and column_name='source') then
+    alter table schemes add column source text default 'builtin';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='schemes' and column_name='state_specific') then
+    alter table schemes add column state_specific boolean not null default false;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='schemes' and column_name='scraped_at') then
+    alter table schemes add column scraped_at timestamptz;
   end if;
 end $$;
 
