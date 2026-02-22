@@ -70,9 +70,22 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="lg:pr-12">
-            <Mascot />
-          </div>
+            <div className="lg:pr-12 -translate-y-24 group relative cursor-pointer">
+              <img src="/ch.png" alt="Character" className="w-full h-auto scale-300 group-hover:scale-310 transition-transform" />
+              
+              {/* Popup on hover */}
+              <div className="absolute bottom-full right-0 mb-4 bg-[#d9ff00] border-4 border-black rounded-2xl p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+              <div className="text-black font-black text-center">
+                <div className="text-2xl mb-1">PUFFU</div>
+                <div className="text-[10px] font-bold italic">Civis AI Agent</div>
+                <div className="text-xs mt-2 leading-snug max-w-xs whitespace-normal">
+                Your eligibility discovery companion
+                </div>
+              </div>
+              {/* Popup arrow */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-[#d9ff00]" />
+              </div>
+            </div>
         </div>
       </section>
 
