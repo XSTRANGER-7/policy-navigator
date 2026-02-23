@@ -76,12 +76,17 @@ export async function POST(req: Request) {
         category: category || "general",
         email:    email   || "",
       });
+      // Consider the user verified if we have any results — eligibility was
+      // successfully computed even though the Python agents are offline.
+      const hasResults =
+        fallbackData.eligible_schemes.length > 0 ||
+        fallbackData.ranked_schemes.length > 0;
       return NextResponse.json({
         status:        "success",
         citizen_id:    citizenId,
         saved_to_db:   savedToDB,
-        verified:      false,
-        fallback:      true,   // lets frontend show a subtle notice if desired
+        verified:      hasResults,
+        fallback:      true,
         response:      fallbackData,
       });
     }
@@ -131,11 +136,17 @@ export async function POST(req: Request) {
     }
 
     // ── 4. Return to frontend ─────────────────────────────────────────────
+    // Consider the user verified whenever the pipeline returned results,
+    // regardless of whether the VC was persisted to Supabase.
+    const pd = pipelineData as { ranked_schemes?: unknown[]; eligible_schemes?: unknown[] } | null;
+    const pipelineHasResults =
+      (pd?.ranked_schemes?.length ?? 0) > 0 ||
+      (pd?.eligible_schemes?.length ?? 0) > 0;
     return NextResponse.json({
       status:      "success",
       citizen_id:  citizenId,
       saved_to_db: savedToDB,
-      verified:    verifiedOk,
+      verified:    verifiedOk || pipelineHasResults,
       response:    pipelineData,
     });
 

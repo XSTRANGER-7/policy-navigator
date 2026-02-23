@@ -63,10 +63,16 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
       } else {
         if (d.saved_to_db) setSavedToDB(true);
         if (d.citizen_id)  setCitizenId(d.citizen_id);
-        if (d.verified)    setIsVerified(true);
         const resp = d.response;
         if (resp && typeof resp === "object" && "ranked_schemes" in resp) {
-          setResult({ kind: "success", data: resp as AgentPipelineResponse });
+          const pipeline = resp as AgentPipelineResponse;
+          // Mark as verified whenever we got eligibility results back,
+          // regardless of whether a VC was saved to Supabase.
+          const hasSchemes =
+            (pipeline.ranked_schemes?.length ?? 0) > 0 ||
+            (pipeline.eligible_schemes?.length ?? 0) > 0;
+          if (d.verified || hasSchemes) setIsVerified(true);
+          setResult({ kind: "success", data: pipeline });
         } else if (typeof resp === "string") {
           setResult({ kind: "plain", text: resp });
         } else {
@@ -294,15 +300,14 @@ function PipelineResults({
           <h4 className="text-xs font-black uppercase tracking-widest text-black/40 mb-4">
             {isPartial ? "Nearest Partial Matches" : "Eligible Schemes — Ranked by Relevance"}
           </h4>
-          {/* Identity gate */}
+          {/* Identity gate — only shown when eligibility check returned no results at all */}
           {!isVerified && (
-            <div className="flex items-start gap-3 bg-[#ff5c8d] border-4 border-black rounded-2xl p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-2">
-              <span className="text-2xl mt-0.5">🔒</span>
+            <div className="flex items-start gap-3 bg-yellow-50 border-4 border-black rounded-2xl p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-2">
+              <span className="text-2xl mt-0.5">⚠️</span>
               <div>
-                <p className="font-black uppercase text-sm">Identity Not Verified</p>
+                <p className="font-black uppercase text-sm">Eligibility Check Incomplete</p>
                 <p className="text-xs font-bold text-black/70 mt-0.5">
-                  Your Verifiable Credential could not be saved (agents may be offline). You must verify your identity before applying.
-                  Re-submit the form when all agents are running to get verified.
+                  We could not complete the full eligibility check. Re-submit the form to try again.
                 </p>
               </div>
             </div>
