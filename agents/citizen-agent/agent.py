@@ -35,24 +35,75 @@ print(f"  Credential Agent  → {CREDENTIAL_AGENT_URL}")
 
 
 def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
-    url = base_url.rstrip("/") + "/webhook/sync"
-    try:
-        resp = requests.post(url, json={"prompt": json.dumps(data), "sender_id": agent.agent_id, "message_type": "query", "metadata": data}, timeout=timeout)
-        resp.raise_for_status()
-        result = resp.json()
-        response = result.get("response", {})
-        if isinstance(response, str):
-            try:
-                return json.loads(response)
-            except json.JSONDecodeError:
-                return response
-        return response
-    except requests.exceptions.ConnectionError:
-        print(f"  [!] Agent at {url} is unreachable")
-        return {"error": f"Agent at {url} unreachable"}
-    except Exception as exc:
-        print(f"  [!] Sub-agent call failed: {exc}")
-        return {"error": str(exc)}
+    """
+    Call a sub-agent with a sequence of fallbacks.
+
+    Order of attempts:
+    1. `base_url` supplied by the caller (module-level var)
+    2. Environment variable override for the same role (if present)
+       - e.g. if base_url contains '5001' this will look for `POLICY_AGENT_URL` etc.
+    3. Localhost default for the expected port (127.0.0.1:PORT)
+
+    This makes the orchestrator resilient when the supervisor or platform
+    provides public URLs, or when agents run in-container on localhost.
+    """
+    attempts = []
+
+    # canonical first attempt (from caller)
+    if base_url:
+        attempts.append(base_url.rstrip("/"))
+
+    # attempt to use any matching env var for the same agent role
+    # discover role name by scanning common env var names
+    role_env_candidates = [
+        "POLICY_AGENT_URL",
+        "ELIGIBILITY_AGENT_URL",
+        "MATCHER_AGENT_URL",
+        "CREDENTIAL_AGENT_URL",
+        "APPLY_AGENT_URL",
+        "FORM16_AGENT_URL",
+        "FORM16_PREMIUM_AGENT_URL",
+    ]
+    for name in role_env_candidates:
+        val = os.environ.get(name)
+        if val:
+            val = val.rstrip("/")
+            if val not in attempts:
+                attempts.append(val)
+
+    # final fallback: try localhost ports 5001-5007 (skip duplicates)
+    for p in range(5001, 5008):
+        candidate = f"http://127.0.0.1:{p}"
+        if candidate not in attempts:
+            attempts.append(candidate)
+
+    # Try each candidate URL until one succeeds
+    last_err = None
+    for base in attempts:
+        url = base + "/webhook/sync"
+        try:
+            print(f"  [Citizen Agent] Trying sub-agent at {url}")
+            resp = requests.post(url, json={"prompt": json.dumps(data), "sender_id": agent.agent_id, "message_type": "query", "metadata": data}, timeout=timeout)
+            resp.raise_for_status()
+            result = resp.json()
+            response = result.get("response", {})
+            if isinstance(response, str):
+                try:
+                    return json.loads(response)
+                except json.JSONDecodeError:
+                    return response
+            return response
+        except requests.exceptions.ConnectionError as ce:
+            print(f"  [!] ConnectionError at {url}: {ce}")
+            last_err = ce
+            continue
+        except Exception as exc:
+            print(f"  [!] Sub-agent call failed at {url}: {exc}")
+            last_err = exc
+            continue
+
+    # If nothing worked, return a structured error
+    return {"error": f"All sub-agent endpoints unreachable (last error: {str(last_err)})"}
 
 
 def extract_citizen_profile(content: any) -> dict:
