@@ -1,7 +1,7 @@
 import type { AgentPipelineResponse } from "@/types/citizen";
 
 const AGENT_BASE_URL =
-  process.env.POLICY_AGENT_URL ?? "https://policy-navigator-fozt.onrender.com";
+  process.env.POLICY_AGENT_URL ?? "https://web-production-dec34.up.railway.app";
 
 /**
  * Fire-and-forget call to the Citizen Agent (async webhook).
