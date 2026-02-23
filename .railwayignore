@@ -1,0 +1,22 @@
+# ── Exclude Next.js frontend (deployed separately, not on this Railway service) ──
+web/
+
+# ── Dev / editor noise ────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# ── Scripts that generated files (not needed at runtime) ─────────────────────
+_write_agents.py
+_write_citizenform.py
+_write_files.py
+_write_schemecard.py
+start-agents.ps1
+
+# ── Docs ─────────────────────────────────────────────────────────────────────
+docs/

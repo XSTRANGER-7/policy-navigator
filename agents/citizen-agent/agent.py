@@ -28,6 +28,10 @@ config = AgentConfig(
 
 agent = ZyndAIAgent(config)
 print(f"[Citizen Agent / Orchestrator] Running on port {port}")
+print(f"  Policy Agent      → {POLICY_AGENT_URL}")
+print(f"  Eligibility Agent → {ELIGIBILITY_AGENT_URL}")
+print(f"  Matcher Agent     → {MATCHER_AGENT_URL}")
+print(f"  Credential Agent  → {CREDENTIAL_AGENT_URL}")
 
 
 def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
@@ -90,7 +94,15 @@ def message_handler(message: AgentMessage, topic: str):
     # Step 2 — Evaluate eligibility (returns ALL schemes with eligible flag)
     print("  [2/4] Checking eligibility...")
     raw_all = call_sub_agent(ELIGIBILITY_AGENT_URL, {"citizen": citizen, "schemes": schemes, "return_all": True})
-    all_evaluated = raw_all if isinstance(raw_all, list) else raw_all.get("all_evaluated", raw_all.get("eligible", []))
+    # Handle both new shape {all_evaluated, llm_summary, llm_advice} and legacy plain list
+    if isinstance(raw_all, dict):
+        all_evaluated = raw_all.get("all_evaluated", [])
+        llm_summary   = raw_all.get("llm_summary", "")
+        llm_advice    = raw_all.get("llm_advice", "")
+    else:
+        all_evaluated = raw_all if isinstance(raw_all, list) else []
+        llm_summary   = ""
+        llm_advice    = ""
     eligible_schemes  = [s for s in all_evaluated if s.get("eligible")]
     partial_schemes   = sorted([s for s in all_evaluated if not s.get("eligible")], key=lambda x: x.get("match_score", 0), reverse=True)
     pipeline.append({"step": "eligibility_check", "count": len(eligible_schemes), "ok": True})
@@ -137,6 +149,8 @@ def message_handler(message: AgentMessage, topic: str):
         "total_eligible":   len(eligible_schemes),
         "pipeline":         pipeline,
         "agent_id":         agent.agent_id,
+        "llm_summary":      llm_summary,
+        "llm_advice":       llm_advice,
     }
     print("[Citizen Agent] Done.\n")
     agent.set_response(message.message_id, json.dumps(result))

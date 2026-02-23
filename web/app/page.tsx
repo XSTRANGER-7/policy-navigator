@@ -183,71 +183,78 @@ export default function Home() {
 
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="flex justify-center mb-24">
-            <div className="bg-[#d9ff00] text-black border-4 border-black rounded-full px-12 py-4 -rotate-3 shadow-[8px_8px_0px_0px_rgba(255,255,255,0.2)]">
-              <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">
-                HOW IT WORKS
-              </h2>
-            </div>
+        <div className="bg-[#d9ff00] text-black border-4 border-black rounded-full px-12 py-4 -rotate-3 shadow-[8px_8px_0px_0px_rgba(255,255,255,0.2)]">
+          <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">
+            HOW IT WORKS
+          </h2>
+        </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-16 md:gap-32 items-start">
-            <div className="space-y-16">
-              <div className="relative">
-                <div className="text-[12rem] font-black absolute -top-24 -left-12 opacity-10 pointer-events-none">
-                  1.
-                </div>
-                <div className="relative space-y-4">
-                  <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">
-                    DISCOVER &amp; VERIFY <br /> WITH AGENTS
-                  </h3>
-                  <p className="text-gray-400 font-medium leading-relaxed max-w-sm">
-                    Connect your secure credentials. Our agents analyze local
-                    and national policies to find every benefit you are entitled
-                    to.
-                  </p>
-                  <Link
-                    href="/eligibility"
-                    className="inline-block bg-[#d9ff00] text-black font-black uppercase px-10 py-3 rounded-full shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:scale-105 transition-transform"
-                  >
-                    View Support
-                  </Link>
-                </div>
-              </div>
-
-              <div className="relative">
-                <div className="text-[12rem] font-black absolute -top-24 -left-12 opacity-10 pointer-events-none">
-                  2.
-                </div>
-                <div className="relative space-y-4">
-                  <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">
-                    NAVIGATE WITHOUT <br /> THE RED TAPE
-                  </h3>
-                  <p className="text-gray-400 font-medium leading-relaxed max-w-sm">
-                    Receive clear, human-readable explanations for every
-                    decision. No more bureaucratic black boxes or opaque
-                    rejections.
-                  </p>
-                  <Link
-                    href="/policies"
-                    className="inline-block bg-[#d9ff00] text-black font-black uppercase px-10 py-3 rounded-full shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:scale-105 transition-transform"
-                  >
-                    Learn More
-                  </Link>
-                </div>
-              </div>
+        <div className="space-y-16">
+          <div className="relative">
+            <div className="text-[12rem] font-black absolute -top-24 -left-12 opacity-10 pointer-events-none">
+          1.
             </div>
-
-            <div className="sticky top-32 group cursor-pointer">
-              <div className="absolute inset-0 bg-[#d9ff00] rounded-[30px] rotate-2 scale-105 opacity-20 group-hover:opacity-40 transition-opacity" />
-              <div className="relative aspect-video bg-zinc-900 border-4 border-white/20 rounded-[30px] flex items-center justify-center overflow-hidden">
-                <div className="w-24 h-24 bg-[#d9ff00] rounded-full border-4 border-black flex items-center justify-center shadow-[6px_6px_0px_0px_rgba(255,255,255,0.2)] transform group-hover:scale-110 transition-transform">
-                  <div className="w-0 h-0 border-t-[18px] border-t-transparent border-l-[30px] border-l-black border-b-[18px] border-b-transparent ml-2" />
-                </div>
-                <div className="absolute bottom-8 left-8 bg-black/80 px-4 py-2 border border-white/10 text-xs font-black uppercase">
-                  Civis AI Platform Demo
-                </div>
-              </div>
+            <div className="relative space-y-4">
+          <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">
+            DISCOVER &amp; VERIFY <br /> WITH AGENTS
+          </h3>
+          <p className="text-gray-400 font-medium leading-relaxed max-w-sm">
+            Connect your secure credentials. Our agents analyze local
+            and national policies to find every benefit you are entitled
+            to.
+          </p>
+          <Link
+            href="/eligibility"
+            className="inline-block bg-[#d9ff00] text-black font-black uppercase px-10 py-3 rounded-full shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:scale-105 transition-transform"
+          >
+            View Support
+          </Link>
             </div>
+          </div>
+
+          <div className="relative">
+            <div className="text-[12rem] font-black absolute -top-24 -left-12 opacity-10 pointer-events-none">
+          2.
+            </div>
+            <div className="relative space-y-4">
+          <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">
+            NAVIGATE WITHOUT <br /> THE RED TAPE
+          </h3>
+          <p className="text-gray-400 font-medium leading-relaxed max-w-sm">
+            Receive clear, human-readable explanations for every
+            decision. No more bureaucratic black boxes or opaque
+            rejections.
+          </p>
+          <Link
+            href="/policies"
+            className="inline-block bg-[#d9ff00] text-black font-black uppercase px-10 py-3 rounded-full shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:scale-105 transition-transform"
+          >
+            Learn More
+          </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="sticky top-32 group cursor-pointer">
+          <div className="absolute inset-0 bg-[#d9ff00] rounded-[30px] rotate-2 scale-105 opacity-20 group-hover:opacity-40 transition-opacity" />
+          <div className="relative aspect-video bg-zinc-900 border-4 border-white/20 rounded-[30px] flex items-center justify-center overflow-hidden">
+            <video
+          className="w-full h-full object-cover"
+          controls
+          autoPlay
+          muted
+          loop
+            >
+          <source src="/demo.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+            </video>
+            <div className="absolute bottom-8 left-8 bg-black/80 px-4 py-2 border border-white/10 text-xs font-black uppercase">
+          Civis AI Platform Demo
+            </div>
+          </div>
+        </div>
           </div>
         </div>
 

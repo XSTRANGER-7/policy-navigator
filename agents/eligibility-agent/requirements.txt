@@ -1,3 +1,4 @@
 zyndai-agent
 python-dotenv
 gunicorn
+openai

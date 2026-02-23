@@ -1,0 +1,11 @@
+# nixpacks.toml — Force Python-only build for Railway
+# This prevents nixpacks from detecting web/package.json and trying Node.js.
+
+[phases.setup]
+nixPkgs = ["python311"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python agents/main.py"

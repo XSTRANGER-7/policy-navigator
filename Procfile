@@ -1,1 +1,1 @@
-web: python n8n/workflows/agent.py
+web: python agents/main.py

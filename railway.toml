@@ -2,5 +2,10 @@
 builder = "nixpacks"
 
 [deploy]
+startCommand = "python agents/main.py"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 10
+
+# Only watch Python files — ignore web/ changes so frontend commits don't retrigger this service
+[[deploy.watchPatterns]]
+include = ["agents/**", "requirements.txt", "runtime.txt", "nixpacks.toml"]

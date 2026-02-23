@@ -1,7 +1,4 @@
 zyndai-agent
 python-dotenv
-gunicorn
-supabase
-requests
 openai
-httpx
+supabase
