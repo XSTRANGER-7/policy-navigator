@@ -10,8 +10,14 @@ build/
 .pytest_cache/
 
 # Env files — never commit real secrets
-agents/.env
+# Only .example files are safe to commit
 .env
+.env.local
+**/.env
+**/.env.local
+# Allow example files
+!**/.env.example
+!**/.env.local.example
 
 # OS / editor
 .DS_Store
