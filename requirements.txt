@@ -1,4 +1,4 @@
-zyndai-agent
+-e ./zyndai_agent
 python-dotenv
 gunicorn
 supabase

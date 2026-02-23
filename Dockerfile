@@ -15,15 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency manifests first for caching
-COPY requirements.txt ./
+# Copy entire project so local editable packages are available to pip
+COPY . /app/
 
 # Install Python deps
 RUN python3 -m pip install --upgrade pip setuptools wheel \
     && python3 -m pip install --no-cache-dir -r requirements.txt
-
-# Copy project
-COPY . /app/
 
 # Default port (Railway will set $PORT env)
 ENV PORT=5000
