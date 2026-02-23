@@ -28,11 +28,9 @@ COPY . /app/
 # Default port (Railway will set $PORT env)
 ENV PORT=5000
 
-# Healthcheck (optional)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python3 -c "import os,sys,socket; s=socket.socket(); p=int(os.getenv('PORT',5000));
-  try: s.bind(('0.0.0.0',p)); s.close(); sys.exit(0)
-  except Exception: sys.exit(1)"
+# Healthcheck omitted: agents use internal IPC/ports and may not serve HTTP.
+# If you want a container-level healthcheck, add a simple HTTP endpoint in the
+# orchestrator and enable a HEALTHCHECK that queries it.
 
 # Start supervisor (uses $PORT for orchestrator)
 CMD ["python3", "agents/main.py"]
