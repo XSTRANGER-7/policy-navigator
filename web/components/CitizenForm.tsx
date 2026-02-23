@@ -198,7 +198,7 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
             <h3 className="font-black text-xl uppercase">Could not get results</h3>
           </div>
           <p className="font-bold text-sm text-black/80">{result.message}</p>
-          <p className="font-bold text-xs text-black/50 mt-2 italic">Make sure the agents are running locally (ports 5000–5005).</p>
+          <p className="font-bold text-xs text-black/50 mt-2 italic">Please try again in a moment. Our servers may be starting up.</p>
         </div>
       )}
 

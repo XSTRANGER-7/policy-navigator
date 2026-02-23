@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { callCitizenAgentSync, checkAgentHealth } from "@/lib/n8nClient";
 import { supabaseServer, supabaseConfigured } from "@/lib/serverSupabase";
+import { runEligibilityFallback } from "@/lib/eligibilityFallback";
 
 /**
  * POST /api/agent
@@ -60,17 +61,29 @@ export async function POST(req: Request) {
       email:    email   || "",
     });
 
-    if (result.status === "error") {
-      return NextResponse.json(
-        { error: result.error || "Agent returned an error" },
-        { status: 502 },
+    // ── Inline TypeScript fallback ─────────────────────────────────────────
+    // When the Railway Python agents are unreachable (502/timeout/network)
+    // we run the full eligibility pipeline locally in TypeScript so the user
+    // always gets results instead of an error screen.
+    if (result.status === "error" || result.status === "timeout") {
+      console.warn(
+        `[/api/agent] Agent unavailable (${result.status}): ${result.error ?? "timeout"}. Running TS fallback.`
       );
-    }
-    if (result.status === "timeout") {
-      return NextResponse.json(
-        { error: "Agent did not respond in time. Please try again." },
-        { status: 504 },
-      );
+      const fallbackData = runEligibilityFallback({
+        age:      Number(age),
+        income:   Number(income),
+        state:    state   || "Unknown",
+        category: category || "general",
+        email:    email   || "",
+      });
+      return NextResponse.json({
+        status:        "success",
+        citizen_id:    citizenId,
+        saved_to_db:   savedToDB,
+        verified:      false,
+        fallback:      true,   // lets frontend show a subtle notice if desired
+        response:      fallbackData,
+      });
     }
 
     const pipelineData = result.response;
