@@ -7,6 +7,7 @@ export default function AgentStatus() {
     "loading",
   );
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [agentUrl, setAgentUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function check() {
@@ -16,6 +17,7 @@ export default function AgentStatus() {
           const data = await res.json();
           setStatus(data.status === "ok" ? "online" : "offline");
           setAgentId(data.agent_id ?? null);
+          setAgentUrl(data.agent_url ?? null);
         } else {
           setStatus("offline");
         }
@@ -43,9 +45,14 @@ export default function AgentStatus() {
   return (
     <div className="flex items-center gap-2">
       <div className={`w-2.5 h-2.5 rounded-full ${dotColor} animate-pulse`} />
-      <span className="text-[10px] font-black uppercase tracking-widest text-black/60">
-        {label}
-      </span>
+      <div className="flex flex-col">
+        <span className="text-[10px] font-black uppercase tracking-widest text-black/60">
+          {label}
+        </span>
+        {agentUrl && status !== "online" ? (
+          <span className="text-[9px] text-black/40">{agentUrl}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

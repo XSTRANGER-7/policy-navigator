@@ -79,8 +79,15 @@ export async function callCitizenAgentSync(payload: {
 export async function checkAgentHealth(): Promise<{
   status: string;
   agent_id?: string;
+  agent_url?: string;
+  error?: string;
 }> {
   const url = `${AGENT_BASE_URL}/health`;
-  const res = await fetch(url);
-  return res.json();
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return { ...data, agent_url: AGENT_BASE_URL };
+  } catch (err: unknown) {
+    return { status: "unreachable", error: (err as Error).message, agent_url: AGENT_BASE_URL };
+  }
 }
