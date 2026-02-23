@@ -5,6 +5,18 @@ Built on [ZyndAI Protocol](https://zynd.ai) with a Next.js 16 frontend, 8 Python
 
 ---
 
+## 🚀 Live Deployment
+
+| Service | URL |
+|---|---|
+| **Frontend (Vercel)** | [https://policy-navigator-jade.vercel.app](https://policy-navigator-jade.vercel.app) |
+| **Agent API (Railway)** | [https://web-production-dec34.up.railway.app](https://web-production-dec34.up.railway.app) |
+| **Agent Health Check** | [https://web-production-dec34.up.railway.app/health](https://web-production-dec34.up.railway.app/health) |
+
+> The frontend is statically deployed on **Vercel**. The 8 Python AI agents run as a single Railway service via `agents/main.py` supervisor, all inside one container on ports 5000–5007.
+
+---
+
 <img width="1920" height="1080" alt="Screenshot (95)" src="https://github.com/user-attachments/assets/2d056f08-81ec-4550-bbbf-f6253b980708" />
 <img width="1920" height="1080" alt="Screenshot (104)" src="https://github.com/user-attachments/assets/ec7d9bef-5e86-456b-930c-99e013f7580a" />
 <img width="1920" height="1080" alt="Screenshot (103)" src="https://github.com/user-attachments/assets/8719e844-720a-4489-97c9-4d0d35cfbd6f" />
@@ -33,8 +45,10 @@ Built on [ZyndAI Protocol](https://zynd.ai) with a Next.js 16 frontend, 8 Python
 12. [Project Structure](#project-structure)
 13. [Environment Variables](#environment-variables)
 14. [Running Locally](#running-locally)
-15. [Deployment](#deployment)
-16. [Future Scope](#future-scope)
+15. [Docker](#docker)
+16. [Deployment](#deployment)
+17. [Contributing](#contributing)
+18. [Future Scope](#future-scope)
 
 ---
 
@@ -66,11 +80,12 @@ CIVIS AI is a **multi-agent eligibility discovery engine**. A citizen submits a 
 ## Architecture Overview
 
 ```
-Browser (Next.js 16)
+Browser (Next.js 16) — Vercel
       │
       ├─ /api/* (Next.js App Router API routes)
       │       │
-      │       ├─ ──> Orchestrator Agent  (port 5000)  [n8n/workflows/agent.py]
+      │       ├─ ──> Orchestrator Agent  (port 5000)  ← Railway public endpoint
+      │       │           │              [n8n/workflows/agent.py]
       │       │           │
       │       │           ├─> Policy Agent      (5001)  scheme database + Supabase
       │       │           ├─> Eligibility Agent (5002)  rule engine
@@ -83,6 +98,8 @@ Browser (Next.js 16)
       │
       └─ Supabase (PostgreSQL + RLS)
 ```
+
+**All 8 agents run inside a single Railway service** via `agents/main.py` supervisor. The orchestrator (port 5000) is the Railway public port — sub-agents communicate on `localhost:5001–5007` within the same container. The Vercel frontend calls the Railway public URL for all agent operations.
 
 All agents communicate over **HTTP webhook** using the ZyndAI `AgentMessage` protocol. Each agent has its own **DID** registered on the ZyndAI network and can be discovered by other agents.
 
@@ -433,60 +450,84 @@ The VC is stored in Supabase and displayed as the **VCBadge** component on the d
 ```
 policy-navigator/
 │
-├── agents/
-│   ├── citizen-agent/        agent.py     # DID creation (deprecated, absorbed by orchestrator)
-│   ├── credential-agent/     agent.py     # VC issuance         (port 5004)
-│   ├── eligibility-agent/    agent.py     # Rule engine         (port 5002)
-│   ├── form16-agent/         agent.py     # Free tax assistant  (port 5006)
-│   ├── form16-premium-agent/ agent.py     # Paid x402 premium   (port 5007)
-│   ├── matcher-agent/        agent.py     # Scheme ranking      (port 5003)
-│   └── policy-agent/         agent.py     # Scheme database     (port 5001)
+├── agents/                                # Python AI agents
+│   ├── main.py               ← Supervisor: starts all 8 agents (used by Railway + Docker)
+│   ├── .env.example          ← Agent env template (safe to commit, no real secrets)
+│   ├── citizen-agent/        agent.py     # DID creation / orchestrator fallback (port 5000)
+│   ├── credential-agent/     agent.py     # VC issuance                           (port 5004)
+│   ├── eligibility-agent/    agent.py     # Rule engine                           (port 5002)
+│   ├── form16-agent/         agent.py     # Free tax assistant                    (port 5006)
+│   ├── form16-premium-agent/ agent.py     # Paid x402 premium                    (port 5007)
+│   ├── matcher-agent/        agent.py     # Scheme ranking                        (port 5003)
+│   ├── apply-agent/          agent.py     # Application submission                (port 5005)
+│   └── policy-agent/         agent.py     # Scheme database                      (port 5001)
 │
 ├── n8n/workflows/
-│   └── agent.py                           # Orchestrator        (port 5000)
+│   └── agent.py                           # Orchestrator (main entry point)       (port 5000)
 │
 ├── supabase/
-│   ├── schema.sql            # Table definitions
-│   ├── seed.sql              # Seed scheme data
-│   ├── policies.sql          # RLS policies
-│   └── disable-rls-dev.sql   # Dev shortcut (no RLS)
+│   ├── schema.sql            # Table definitions (citizens, schemes, applications, credentials)
+│   ├── seed.sql              # Seed data
+│   ├── seed-schemes.sql      # 15+ real Indian government schemes
+│   ├── migrate-schemes.sql   # Schema migrations
+│   ├── policies.sql          # Row Level Security policies
+│   └── disable-rls-dev.sql   # Dev shortcut — disables RLS for local testing
 │
-├── web/                      # Next.js 16 frontend
+├── zyndai_agent/             # ZyndAI SDK (local editable package)
+│   ├── agent.py
+│   ├── message.py
+│   └── setup.py
+│
+├── web/                      # Next.js 16 frontend (deployed to Vercel)
 │   ├── app/
-│   │   ├── page.tsx          # Hero page
+│   │   ├── page.tsx          # Hero / landing page
 │   │   ├── layout.tsx        # Root layout (Navbar + Footer)
 │   │   ├── globals.css       # Tailwind v4 import + custom styles
-│   │   ├── eligibility/      # Citizen eligibility form
-│   │   ├── policies/         # Browse schemes
-│   │   ├── dashboard/        # Agent + VC dashboard
-│   │   ├── form16/           # Form 16 tax assistant
+│   │   ├── eligibility/      # Citizen eligibility form + agent pipeline trigger
+│   │   ├── policies/         # Browse all government schemes
+│   │   ├── dashboard/        # Agent status + issued VCs + stats
+│   │   ├── form16/           # 6-tab Form 16 tax assistant
+│   │   ├── auth/             # Authentication page
 │   │   └── api/
-│   │       ├── agent/        # Orchestrator proxy
-│   │       ├── citizen/      # Citizen CRUD
-│   │       ├── eligibility/  # Pipeline trigger
-│   │       ├── vc/           # VC operations
+│   │       ├── agent/        route.ts    # Orchestrator proxy + pipeline entry
+│   │       ├── citizen/      route.ts    # Citizen CRUD
+│   │       ├── eligibility/  route.ts    # Eligibility pipeline trigger
+│   │       ├── vc/           route.ts    # Verifiable Credential operations
+│   │       ├── schemes/      route.ts    # Scheme listing from Supabase
+│   │       ├── applications/ route.ts    # Application management
+│   │       ├── apply/        route.ts    # Apply to a scheme
+│   │       ├── policies/     route.ts    # Policy data
+│   │       ├── scrape/       route.ts    # Scheme scraper trigger
 │   │       └── form16/
-│   │           ├── route.ts         # Free agent proxy
-│   │           ├── pay/route.ts     # x402 receipt builder
-│   │           └── premium/route.ts # Paid agent proxy
-│   ├── components/           # All React components
-│   ├── lib/                  # Server Supabase client
-│   ├── libs/                 # Browser Supabase + n8n client
-│   └── types/                # TypeScript types (citizen, scheme, credential)
+│   │           ├── route.ts             # Free Form 16 agent proxy
+│   │           ├── pay/route.ts         # x402 receipt builder
+│   │           └── premium/route.ts     # Paid agent proxy
+│   ├── components/           # All React components (Navbar, SchemeCard, VCBadge, etc.)
+│   ├── lib/                  # Server-side: Supabase + n8nClient with agent health check
+│   ├── libs/                 # Client-side: browser Supabase client
+│   ├── types/                # TypeScript types: citizen, scheme, credential
+│   └── .env.local.example    ← Frontend env template (safe to commit)
 │
-├── agents/.env               # Python agent secrets
-├── web/.env.local            # Next.js secrets
-├── start-agents.ps1          # One-command launcher for all 8 agents
+├── scripts/
+│   └── scrape_schemes.py     # Scheme scraper utility
+│
+├── Dockerfile                # Production Docker image (python:3.11-slim, runs agents/main.py)
+├── nixpacks.toml             # Railway Nixpacks builder config
+├── railway.toml              # Railway deploy config (start command, watch patterns)
+├── Procfile                  # Heroku / Render entry point
+├── start-agents.ps1          # Windows: launch all 8 agents in separate terminals
 ├── requirements.txt          # Root Python dependencies
-├── runtime.txt               # Python version pin
-└── Procfile                  # Heroku-style process file
+├── runtime.txt               # Python version pin (3.11.x)
+└── .gitignore                # Blocks all .env / .env.local files from git
 ```
 
 ---
 
 ## Environment Variables
 
-### `agents/.env`
+> **Security note:** `.env` and `.env.local` files are **not committed to this repo** (blocked by `.gitignore`). Use the `.example` files as templates — copy them, fill in your secrets, and never commit the real files.
+
+### `agents/.env` (copy from `agents/.env.example`)
 
 ```env
 ZYND_API_KEY=your_zynd_api_key
@@ -496,23 +537,34 @@ PAYMENT_WALLET_ADDRESS=0xYourProjectWalletAddress
 BASE_RPC_URL=https://mainnet.base.org
 ```
 
-### `web/.env.local`
+### `web/.env.local` (copy from `web/.env.local.example`)
 
 ```env
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
-# Agent URLs
-POLICY_AGENT_URL=http://127.0.0.1:5001
-ELIGIBILITY_AGENT_URL=http://127.0.0.1:5002
-MATCHER_AGENT_URL=http://127.0.0.1:5003
-CREDENTIAL_AGENT_URL=http://127.0.0.1:5004
-APPLY_AGENT_URL=http://127.0.0.1:5005
-FORM16_AGENT_URL=http://127.0.0.1:5006
-FORM16_PREMIUM_AGENT_URL=http://127.0.0.1:5007
+# Agent URLs — use localhost for local dev, Railway URL for production
+# Local development:
+# POLICY_AGENT_URL=http://127.0.0.1:5000
+# APPLY_AGENT_URL=http://127.0.0.1:5005
+# FORM16_AGENT_URL=http://127.0.0.1:5006
+# FORM16_PREMIUM_AGENT_URL=http://127.0.0.1:5007
+
+# Production (Railway):
+POLICY_AGENT_URL=https://your-railway-app.up.railway.app
+APPLY_AGENT_URL=https://your-railway-app.up.railway.app
+FORM16_AGENT_URL=https://your-railway-app.up.railway.app
+FORM16_PREMIUM_AGENT_URL=https://your-railway-app.up.railway.app
+
+# n8n webhook (local n8n):
+# N8N_CITIZEN_WEBHOOK=http://localhost:5678/webhook/citizen-agent
 
 # x402 Payment
 PAYMENT_WALLET_ADDRESS=0xYourProjectWalletAddress
+PAYMENT_SECRET=your-secret-change-me
 BASE_RPC_URL=https://mainnet.base.org
 ```
 
@@ -520,59 +572,179 @@ BASE_RPC_URL=https://mainnet.base.org
 
 ## Running Locally
 
-### Prerequisites
+There are **three ways** to run this project locally. Choose the one that suits you best.
 
-- Python 3.11+ with a virtual environment at `.venv/`
-- Node.js 20+
-- A Supabase project with the schema applied
-- A ZyndAI API key from [zynd.ai](https://zynd.ai)
+---
 
-### 1. Install Python dependencies
+### Prerequisites (all methods)
+
+- A [Supabase](https://supabase.com) project with the schema applied (see Step 3 below)
+- A [ZyndAI](https://zynd.ai) API key
+- Git clone of this repo
 
 ```bash
+git clone https://github.com/XSTRANGER-7/policy-navigator.git
+cd policy-navigator
+```
+
+---
+
+### Method A — PowerShell Script (Windows, recommended for development)
+
+The fastest way on Windows. A single script launches all 8 agents in separate terminal windows.
+
+**Requirements:** Python 3.11+, Node.js 20+
+
+#### 1. Create Python virtual environment
+
+```powershell
 python -m venv .venv
-.venv\Scripts\activate       # Windows
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 2. Install frontend dependencies
+> If you get a script execution error, run PowerShell as Administrator first:
+> ```powershell
+> Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
 
-```bash
+#### 2. Install frontend dependencies
+
+```powershell
 cd web
 npm install
+cd ..
 ```
 
-### 3. Apply Supabase schema
+#### 3. Apply Supabase schema
 
-Run `supabase/schema.sql` → `supabase/policies.sql` → `supabase/seed.sql` in the Supabase SQL editor.
+Open your [Supabase SQL Editor](https://app.supabase.com) and run these files in order:
 
-### 4. Set environment variables
+```
+supabase/schema.sql       ← creates all tables
+supabase/policies.sql     ← Row Level Security rules
+supabase/seed.sql         ← seeds 15+ real government schemes
+```
 
-Copy and fill in `agents/.env` and `web/.env.local` from the examples above.
+> For local development without RLS, also run `supabase/disable-rls-dev.sql`.
 
-### 5. Start all agents
+#### 4. Set environment variables
+
+```powershell
+# Agents
+copy agents\.env.example agents\.env
+# Edit agents/.env with your ZYND_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+# Frontend
+copy web\.env.local.example web\.env.local
+# Edit web/.env.local with your Supabase keys and agent URLs (use http://127.0.0.1:PORT for local)
+```
+
+#### 5. Start all agents
 
 ```powershell
 .\start-agents.ps1
 ```
 
-This launches all 8 agents on ports 5000–5007 in separate windows, kills any stale processes on those ports first, and confirms each one starts.
+This script:
+- Kills any stale processes on ports 5000–5007
+- Launches all 8 agents in separate PowerShell windows
+- Waits for each to confirm startup
 
-### 6. Start the frontend
+#### 6. Start the frontend
 
-```bash
+```powershell
 cd web
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
+---
+
+### Method B — Python Supervisor (cross-platform, single terminal)
+
+The `agents/main.py` supervisor starts all 8 agents as subprocesses in **one terminal** — the same mode used in Railway production.
+
+**Requirements:** Python 3.11+, Node.js 20+
+
+#### 1. Set up Python environment
+
+```bash
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+pip install -r requirements.txt
+```
+
+#### 2. Set environment variables (same as Method A Step 4)
+
+#### 3. Start all agents via supervisor
+
+```bash
+python agents/main.py
+```
+
+All 8 agents start as background subprocesses. The orchestrator binds to `$PORT` (default `5000`). Use `Ctrl+C` to stop everything.
+
+#### 4. Start the frontend (separate terminal)
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+---
+
+### Method C — Docker (fully containerised, no Python/Node setup)
+
+The `Dockerfile` bundles all agents into one container. Best for clean, reproducible local testing.
+
+**Requirements:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+#### 1. Build the image
+
+```bash
+docker build -t policy-navigator .
+```
+
+#### 2. Run the container
+
+```bash
+docker run -p 5000:5000 \
+  -e ZYND_API_KEY=your_key \
+  -e SUPABASE_URL=https://your-project.supabase.co \
+  -e SUPABASE_SERVICE_ROLE_KEY=your_service_role_key \
+  -e PAYMENT_WALLET_ADDRESS=0xYourWallet \
+  policy-navigator
+```
+
+This starts all 8 agents inside the container. The orchestrator is exposed at `http://localhost:5000`.
+
+#### 3. Run the frontend separately
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Point `POLICY_AGENT_URL=http://localhost:5000` in `web/.env.local` and open [http://localhost:3000](http://localhost:3000).
+
+---
+
 ### Port Reference
 
-| Port | Agent |
+| Port | Service |
 |---|---|
 | 3000 | Next.js frontend |
-| 5000 | Orchestrator |
+| 5000 | Orchestrator / Citizen Agent |
 | 5001 | Policy Agent |
 | 5002 | Eligibility Agent |
 | 5003 | Matcher Agent |
@@ -583,17 +755,202 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
+## Docker
+
+The repo ships a production-ready `Dockerfile` based on `python:3.11-slim` and a `nixpacks.toml` for Railway's Nixpacks builder.
+
+### Image Details
+
+- **Base**: `python:3.11-slim`
+- **Build deps**: `build-essential`, `gcc`, `libpq-dev`
+- **Entrypoint**: `python3 agents/main.py` (the supervisor)
+- **Port**: `$PORT` (defaults to `5000`, exposed by Railway automatically)
+- **Healthcheck**: Query `GET /health` on the orchestrator port
+
+### Build & Run (quick reference)
+
+```bash
+# Build
+docker build -t policy-navigator .
+
+# Run with env file
+docker run --env-file agents/.env -p 5000:5000 policy-navigator
+
+# Run with inline env vars
+docker run \
+  -e ZYND_API_KEY=xxx \
+  -e SUPABASE_URL=xxx \
+  -e SUPABASE_SERVICE_ROLE_KEY=xxx \
+  -p 5000:5000 \
+  policy-navigator
+```
+
+### Multi-service with Docker Compose (optional)
+
+If you want to run the frontend container alongside the agents:
+
+```yaml
+# docker-compose.yml (example — not committed, create locally)
+version: "3.9"
+services:
+  agents:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - agents/.env
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile   # create a simple Next.js Dockerfile if needed
+    ports:
+      - "3000:3000"
+    env_file:
+      - web/.env.local
+    depends_on:
+      - agents
+```
+
+---
+
 ## Deployment
 
-| Service | What It Hosts |
+The project is split across two platforms:
+
+| Service | Platform | URL |
+|---|---|---|
+| Next.js Frontend | **Vercel** | [https://policy-navigator-jade.vercel.app](https://policy-navigator-jade.vercel.app) |
+| All 8 Python Agents | **Railway** | [https://web-production-dec34.up.railway.app](https://web-production-dec34.up.railway.app) |
+| Database | **Supabase** | Managed PostgreSQL |
+
+### Deploy Frontend to Vercel
+
+1. Push your fork to GitHub
+2. Go to [vercel.com/new](https://vercel.com/new) → Import repository → select `policy-navigator`
+3. Set **Root Directory** to `web`
+4. Add these **Environment Variables** in the Vercel dashboard:
+
+```
+NEXT_PUBLIC_SUPABASE_URL          = https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY     = your_anon_key
+SUPABASE_URL                      = https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY         = your_service_role_key
+POLICY_AGENT_URL                  = https://your-railway-app.up.railway.app
+APPLY_AGENT_URL                   = https://your-railway-app.up.railway.app
+FORM16_AGENT_URL                  = https://your-railway-app.up.railway.app
+FORM16_PREMIUM_AGENT_URL          = https://your-railway-app.up.railway.app
+PAYMENT_WALLET_ADDRESS            = 0xYourWallet
+PAYMENT_SECRET                    = your-secret
+BASE_RPC_URL                      = https://mainnet.base.org
+```
+
+5. Deploy — Vercel will auto-deploy on every push to `main`
+
+### Deploy Agents to Railway
+
+Railway runs all 8 agents as one service using the `agents/main.py` supervisor. The repo includes both `Dockerfile` and `nixpacks.toml` — Railway will pick the right builder automatically.
+
+1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
+2. Select `policy-navigator` repository
+3. Railway detects `nixpacks.toml` and builds automatically
+4. Add these **Environment Variables** in Railway service settings:
+
+```
+ZYND_API_KEY               = your_zynd_api_key
+SUPABASE_URL               = https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY  = your_service_role_key
+PAYMENT_WALLET_ADDRESS     = 0xYourWallet
+BASE_RPC_URL               = https://mainnet.base.org
+PORT                       = 5000          ← Railway sets this automatically
+```
+
+5. Railway will launch `python3 agents/main.py` which spawns all 8 agents
+6. The public Railway domain points to port 5000 (the orchestrator)
+7. Internal agents communicate on `localhost:5001–5007` within the same container
+
+### Verify Deployment
+
+Check agent health:
+```bash
+curl https://your-railway-app.up.railway.app/health
+# Expected: {"status": "ok", ...}
+```
+
+Check full pipeline from the frontend:
+```bash
+curl https://policy-navigator-jade.vercel.app/api/agent
+# Expected: {"status": "ok", "agent_url": "https://...railway.app"}
+```
+
+### Alternate Deployment Targets
+
+The `Procfile` supports **Heroku** or **Render** deployments as well:
+
+```
+web: python3 agents/main.py
+```
+
+If deploying to Render, set the same environment variables as Railway above.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines to keep the codebase consistent.
+
+### How to Contribute
+
+1. **Fork** the repository on GitHub
+2. **Create a feature branch** from `main`:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. **Make your changes** following the code style described below
+4. **Test locally** — make sure agents start (`.\start-agents.ps1` or `python agents/main.py`) and the frontend builds (`cd web && npm run build`)
+5. **Commit** with a clear, descriptive message:
+   ```bash
+   git commit -m "feat: add XYZ feature to eligibility agent"
+   ```
+6. **Push** your branch and open a **Pull Request** against `main`
+
+### Commit Message Convention
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+| Prefix | Use for |
 |---|---|
-| **Vercel** | Next.js frontend (`web/`) |
-| **Railway** | All 8 Python agents (separate services per agent) |
-| **Supabase** | Managed PostgreSQL + Auth |
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `chore:` | Tooling, config, dependency updates |
+| `docs:` | Documentation only |
+| `refactor:` | Code restructuring without behaviour change |
+| `test:` | Adding or fixing tests |
 
-For Railway deployment, each agent is a separate service with its `PORT` env var set to the correct port, and the `ZYND_API_KEY` / Supabase credentials injected as environment variables.
+### Code Style
 
-The `Procfile` at the root defines process types for platforms that support it (Heroku, Render).
+- **Python agents**: Follow [PEP 8](https://pep8.org). Each agent lives in its own folder and must have a `requirements.txt`.
+- **TypeScript / Next.js**: Follow the existing ESLint config (`web/eslint.config.mjs`). Run `npm run lint` before opening a PR.
+- **Environment variables**: Never commit real secrets. Always add new env vars to both `agents/.env.example` and `web/.env.local.example`.
+- **Database changes**: Add migration SQL to `supabase/` and document in the PR description.
+
+### Project Areas Open for Contribution
+
+- 🧠 **New agent capabilities** — add actions to existing agents or create new specialist agents
+- 🌐 **Multi-language UI** — Hindi, Marathi, Bengali, Tamil translations
+- 🏛️ **New government schemes** — add entries to `supabase/seed-schemes.sql`
+- 🧪 **Tests** — unit tests for agent rule logic (Python `pytest`) and API routes
+- ♿ **Accessibility** — ARIA improvements to the React components
+- 📱 **Mobile responsiveness** — improvements to any page at `sm:` breakpoints
+- 🔒 **Security** — Supabase RLS policies, VC verification improvements
+
+### Reporting Issues
+
+Open a GitHub Issue with:
+- **Environment** (OS, Python version, Node version)
+- **Steps to reproduce**
+- **Expected vs actual behaviour**
+- **Relevant logs** (agent terminal output or browser console)
 
 ---
 
@@ -607,10 +964,8 @@ The `Procfile` at the root defines process types for platforms that support it (
 - **Multi-language support** — Hindi, Marathi, Bengali, Tamil UI translations
 - **Scheme scraper** — Automated scraping of MyScheme.gov.in to keep the scheme database fresh
 - **Agency portal** — Government agency dashboard to publish new schemes and review applications
-
-
-
-
+- **Docker Compose setup** — One-command `docker compose up` for the full stack locally
+- **CI/CD pipeline** — GitHub Actions for lint, build, and deploy checks on every PR
 
 
 
