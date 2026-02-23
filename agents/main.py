@@ -92,7 +92,12 @@ def start_agents() -> None:
     for agent in AGENTS:
         env = os.environ.copy()
         env["PORT"] = str(agent["port"])
-        env.update(INTER_AGENT_ENV)  # inject inter-agent URLs into every agent
+        # Inject inter-agent URLs only when they are not already provided in
+        # the environment. This preserves externally-configured public URLs
+        # (e.g. Railway service URLs) and prevents the supervisor from
+        # overwriting them with localhost:PORT values.
+        for k, v in INTER_AGENT_ENV.items():
+            env.setdefault(k, v)
 
         script_path = ROOT / agent["script"]
         if not script_path.exists():
@@ -121,7 +126,8 @@ def restart_agent(agent: dict) -> subprocess.Popen:
     """Restart a single crashed agent."""
     env = os.environ.copy()
     env["PORT"] = str(agent["port"])
-    env.update(INTER_AGENT_ENV)
+    for k, v in INTER_AGENT_ENV.items():
+        env.setdefault(k, v)
     script_path = ROOT / agent["script"]
     proc = subprocess.Popen(
         [sys.executable, str(script_path)],
