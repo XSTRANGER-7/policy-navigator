@@ -42,7 +42,10 @@ def extract_data(content):
         except Exception:
             return {}, []
     data = content.get("metadata", content)
-    return data.get("citizen", {}), data.get("matched_schemes", [])
+    citizen = data.get("citizen", {})
+    # Accept both 'matched_schemes' (legacy) and 'eligible_schemes' (current orchestrator)
+    schemes = data.get("matched_schemes") or data.get("eligible_schemes") or []
+    return citizen, schemes
 
 
 def message_handler(message: AgentMessage, topic: str):

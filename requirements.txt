@@ -1,4 +1,5 @@
 -e ./zyndai_agent
+flask
 python-dotenv
 gunicorn
 supabase
