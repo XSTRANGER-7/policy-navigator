@@ -111,6 +111,30 @@ export async function GET(req: Request) {
       categories,
     });
   } catch (err: unknown) {
-    return NextResponse.json({ error: (err as Error).message, schemes: [], total: 0 }, { status: 500 });
+    const errorMsg = err instanceof Error ? err.message : "Unknown error";
+    console.error("❌ /api/schemes error:", errorMsg);
+    
+    // Check if it's a schema issue
+    if (errorMsg.includes("does not exist")) {
+      return NextResponse.json(
+        {
+          error: "Database schema not initialized",
+          schemes: [],
+          total: 0,
+          hint: "Run: 1) supabase/schema.sql in Supabase Dashboard, 2) python scripts/scrape_schemes.py --source builtin",
+        },
+        { status: 503 }
+      );
+    }
+    
+    return NextResponse.json(
+      {
+        error: errorMsg,
+        schemes: [],
+        total: 0,
+        hint: "Check Supabase connection and schema deployment",
+      },
+      { status: 500 }
+    );
   }
 }

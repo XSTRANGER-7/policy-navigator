@@ -146,18 +146,29 @@ function SchemesInner() {
 
     try {
       const r = await fetch(`/api/schemes?${params}`);
-      const d = await r.json();
-      if (d.error) { setError(d.error); setSchemes([]); }
-      else {
+      const d = await r.json().catch(() => null);
+
+      if (!r.ok) {
+        const message = d?.error || `API returned ${r.status}`;
+        throw new Error(message);
+      }
+
+      if (d?.error) {
+        setError(`${d.error}. ${d.hint || ""}`);
+        setSchemes([]);
+      } else {
         setSchemes(d.schemes ?? []);
         setTotal(d.total ?? 0);
         if (d.sources)    setAllSources(d.sources);
         if (d.ministries) setAllMinistries(d.ministries);
       }
-    } catch {
-      setError("Failed to load schemes");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Failed to load schemes: ${msg}`);
+      setSchemes([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [category, debouncedQ, source, ministry, stateSpec, page]);
 
   useEffect(() => { fetchSchemes(); }, [fetchSchemes]);
@@ -174,7 +185,7 @@ function SchemesInner() {
       const res  = await fetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source }),
+        body: JSON.stringify({ source, saveToDb: true }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -182,6 +193,8 @@ function SchemesInner() {
       } else {
         setScraperResult(data as ScrapeResult);
         setScraperTab(data.newCount > 0 ? "new" : "all");
+        // Refresh schemes after scraper completes
+        await fetchSchemes();
       }
     } catch {
       setScraperError("Network error — make sure the app is running.");

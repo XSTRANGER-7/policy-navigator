@@ -57,20 +57,43 @@ export default function PoliciesPage() {
   }, [q]);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams();
-    if (category) params.set("category", category);
-    if (search)   params.set("q", search);
+    let canceled = false;
+    
+    const loadPolicies = async () => {
+      setLoading(true);
+      setError(null);
+      const params = new URLSearchParams();
+      if (category) params.set("category", category);
+      if (search)   params.set("q", search);
 
-    fetch(`/api/policies?${params}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) setError(d.error);
-        else setSchemes(d.schemes ?? []);
-      })
-      .catch(() => setError("Failed to load policies"))
-      .finally(() => setLoading(false));
+      try {
+        const r = await fetch(`/api/policies?${params}`);
+        const respBody = await r.json().catch(() => null);
+        if (canceled) return;
+
+        if (!r.ok) {
+          const message = respBody?.error || `API returned ${r.status}`;
+          throw new Error(message);
+        }
+
+        if (respBody?.error) {
+          setError(`${respBody.error}. ${respBody.hint || ""}`);
+        } else {
+          setSchemes(respBody?.schemes ?? []);
+        }
+      } catch (err) {
+        if (!canceled) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setError(`Failed to load policies: ${msg}`);
+          setSchemes([]);
+        }
+      } finally {
+        if (!canceled) setLoading(false);
+      }
+    };
+
+    loadPolicies();
+    return () => { canceled = true; };
   }, [category, search]);
 
   return (

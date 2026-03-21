@@ -14,7 +14,10 @@ export async function GET(req: Request) {
   const q = searchParams.get("q");
 
   if (!supabaseConfigured) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
+    return NextResponse.json(
+      { error: "Supabase not configured. Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local" },
+      { status: 503 }
+    );
   }
 
   try {
@@ -28,10 +31,31 @@ export async function GET(req: Request) {
     if (q) query = query.or(`name.ilike.%${q}%,description.ilike.%${q}%`);
 
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Supabase query error:", error.message);
+      // Check if table doesn't exist
+      if (error.message?.includes("does not exist")) {
+        return NextResponse.json(
+          {
+            error: "Database schema not initialized",
+            hint: "Run: supabase/schema.sql in Supabase Dashboard, then: python scripts/scrape_schemes.py --source builtin",
+          },
+          { status: 503 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json({ schemes: data ?? [] });
   } catch (err: unknown) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const errorMsg = err instanceof Error ? err.message : "Unknown error";
+    console.error("❌ /api/policies error:", errorMsg);
+    return NextResponse.json(
+      {
+        error: errorMsg,
+        hint: "Make sure Supabase env vars are set and schema.sql has been deployed",
+      },
+      { status: 500 }
+    );
   }
 }
