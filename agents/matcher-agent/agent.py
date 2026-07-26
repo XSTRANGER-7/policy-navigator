@@ -1,8 +1,7 @@
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, time, json
+import os, time, json, uuid
 
 try:
     from openai import OpenAI as _OpenAI
@@ -17,6 +16,15 @@ port = int(os.environ.get("PORT", 5003))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 _llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
 
+agent_id = f"agent:matcher-agent:{uuid.uuid4().hex[:6]}"
+
+app = Flask("Matcher Agent")
+
+CATEGORY_WEIGHTS = {
+    "bpl": 10, "disabled": 9, "sc_st": 8, "senior_citizen": 8,
+    "women": 7, "farmer": 7, "student": 6, "obc": 5, "general": 3,
+}
+
 
 def llm_why_scheme(citizen: dict, scheme: dict) -> str:
     """Generate a 1-sentence personal reason why this scheme suits this citizen."""
@@ -26,7 +34,7 @@ def llm_why_scheme(citizen: dict, scheme: dict) -> str:
         prompt = (
             f"Citizen: age {citizen.get('age')}, income Rs.{citizen.get('income'):,}/yr, "
             f"category '{citizen.get('category')}', state '{citizen.get('state', 'India')}'.\n"
-            f"Scheme: '{scheme.get('name')}' — {scheme.get('description', '')}\n"
+            f"Scheme: '{scheme.get('name')}' - {scheme.get('description', '')}\n"
             f"Benefits: {scheme.get('benefits', '')}\n\n"
             f"Write exactly ONE plain-English sentence explaining why THIS scheme is a strong match "
             f"for THIS specific citizen. Be specific about their profile. No preamble."
@@ -42,37 +50,12 @@ def llm_why_scheme(citizen: dict, scheme: dict) -> str:
         print(f"[Matcher Agent][LLM] {e}")
         return ""
 
-config = AgentConfig(
-    name="Matcher Agent",
-    description="Ranks eligible schemes by relevance and benefit value for each citizen profile",
-    capabilities={
-        "services": ["scheme_ranking"],
-        "ai": ["relevance_scoring"],
-        "protocols": ["http"]
-    },
-    mode="webhook",
-    webhook_host="0.0.0.0",
-    webhook_port=port,
-    registry_url="https://registry.zynd.ai",
-    api_key=os.environ.get("ZYND_API_KEY")
-)
-
-agent = ZyndAIAgent(config)
-print(f"[Matcher Agent] Running on port {port} | ID: {agent.agent_id}")
-
-# Category priority weights — higher = more priority
-CATEGORY_WEIGHTS = {
-    "bpl": 10, "disabled": 9, "sc_st": 8, "senior_citizen": 8,
-    "women": 7, "farmer": 7, "student": 6, "obc": 5, "general": 3,
-}
-
 
 def compute_relevance(citizen: dict, scheme: dict) -> int:
     base = scheme.get("match_score", 50)
     category = str(citizen.get("category", "general")).lower()
     scheme_cat = str(scheme.get("category", "")).lower()
 
-    # Exact primary category match gets big boost
     if category == scheme_cat:
         boost = 25
     elif category in CATEGORY_WEIGHTS:
@@ -80,7 +63,6 @@ def compute_relevance(citizen: dict, scheme: dict) -> int:
     else:
         boost = 0
 
-    # Boost for very low income relative to limit
     income = int(citizen.get("income", 0))
     income_ratio_boost = 0
     if income < 150000:
@@ -97,17 +79,39 @@ def extract_data(content):
             content = json.loads(content)
         except Exception:
             return {}, []
+    if isinstance(content, dict):
+        if "prompt" in content:
+            try:
+                parsed = json.loads(content["prompt"])
+                content = parsed.get("metadata", parsed)
+            except Exception:
+                pass
     data = content.get("metadata", content)
     return data.get("citizen", {}), data.get("eligible_schemes", [])
 
 
-def message_handler(message: AgentMessage, topic: str):
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Matcher Agent", "agent_id": agent_id})
+
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
     print("[Matcher Agent] Ranking schemes")
-    citizen, eligible_schemes = extract_data(message.content)
+    citizen, eligible_schemes = extract_data(body)
 
     if not eligible_schemes:
-        agent.set_response(message.message_id, json.dumps([]))
-        return
+        return jsonify({
+            "status": "ok",
+            "agent": "Matcher Agent",
+            "message_id": message_id,
+            "response": json.dumps([])
+        })
 
     scored = []
     for scheme in eligible_schemes:
@@ -118,17 +122,21 @@ def message_handler(message: AgentMessage, topic: str):
     for i, s in enumerate(ranked):
         s["rank"] = i + 1
 
-    # ── LLM: "why this scheme fits you" for top 5 ──────────────────────────
     for s in ranked[:5]:
         why = llm_why_scheme(citizen, s)
         if why:
             s["llm_why"] = why
 
     print(f"  => Ranked {len(ranked)} schemes")
-    agent.set_response(message.message_id, json.dumps(ranked))
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Matcher Agent",
+        "message_id": message_id,
+        "response": json.dumps(ranked)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    print(f"[Matcher Agent] Running on port {port} | ID: {agent_id}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

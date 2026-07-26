@@ -1,8 +1,7 @@
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, time, json
+import os, time, json, uuid
 from datetime import datetime, timezone
 
 try:
@@ -20,17 +19,10 @@ _llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY)
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
-config = AgentConfig(
-    name="Apply Agent",
-    description="Handles scheme applications: validates docs, saves to Supabase, tracks progress",
-    capabilities={"services": ["application_processing", "doc_validation"], "ai": ["form_assist"], "protocols": ["http"]},
-    mode="webhook", webhook_host="0.0.0.0", webhook_port=port,
-    registry_url="https://registry.zynd.ai", api_key=os.environ.get("ZYND_API_KEY")
-)
-agent = ZyndAIAgent(config)
-print(f"[Apply Agent] Running on port {port} | ID: {agent.agent_id}")
+agent_id = f"agent:apply-agent:{uuid.uuid4().hex[:6]}"
 
-# Minimum required docs per scheme
+app = Flask("Apply Agent")
+
 SCHEME_DOCS = {
     "pm_kisan":               ["Aadhaar Card", "Land Records (Khasra/Khatauni)", "Bank Account linked to Aadhaar"],
     "ayushman_bharat":        ["Aadhaar Card", "Ration Card or SECC Family ID"],
@@ -66,7 +58,6 @@ APPLICATION_STEPS = [
 
 
 def llm_application_guidance(citizen: dict, scheme_id: str, scheme_name: str, required_docs: list) -> dict:
-    """Generate personalized application guidance for this citizen and scheme."""
     if not _llm:
         return {}
     try:
@@ -129,29 +120,42 @@ def extract_payload(content) -> dict:
         except Exception:
             return {}
     if isinstance(content, dict):
+        if "prompt" in content:
+            try:
+                parsed = json.loads(content["prompt"])
+                content = parsed.get("metadata", parsed)
+            except Exception:
+                pass
         return content.get("metadata", content)
     return {}
 
 
-def message_handler(message: AgentMessage, topic: str):
-    print("[Apply Agent] Processing application request")
-    payload = extract_payload(message.content)
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Apply Agent", "agent_id": agent_id})
 
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
+    print("[Apply Agent] Processing application request")
+    payload = extract_payload(body)
     action = payload.get("action", "get_docs")
 
     if action == "get_docs":
-        # Return required docs for a scheme
         scheme_id = payload.get("scheme_id", "")
         category  = payload.get("category", "general")
         docs      = get_required_docs(scheme_id, category)
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "scheme_id":    scheme_id,
             "required_docs": docs,
             "steps":        APPLICATION_STEPS,
-        }))
-
+        }
     elif action == "submit":
-        # Save application
         scheme_id   = payload.get("scheme_id", "unknown")
         scheme_name = payload.get("scheme_name", "Unknown Scheme")
         saved       = save_application(payload)
@@ -164,11 +168,10 @@ def message_handler(message: AgentMessage, topic: str):
             "Track your application status using your Application ID",
         ]
 
-        # ── LLM: personalized application guidance ────────────────────────
         citizen  = payload.get("citizen", {})
         llm_info = llm_application_guidance(citizen, scheme_id, scheme_name, required)
 
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "application_id":   str(app_id),
             "scheme_id":        scheme_id,
             "scheme_name":      scheme_name,
@@ -181,13 +184,18 @@ def message_handler(message: AgentMessage, topic: str):
             "llm_guidance":     llm_info.get("guidance", ""),
             "llm_warning":      llm_info.get("warning", ""),
             "llm_priority_doc": llm_info.get("priority_doc", ""),
-        }))
-
+        }
     else:
-        agent.set_response(message.message_id, json.dumps({"error": f"Unknown action: {action}"}))
+        res = {"error": f"Unknown action: {action}"}
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Apply Agent",
+        "message_id": message_id,
+        "response": json.dumps(res)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    print(f"[Apply Agent] Running on port {port} | ID: {agent_id}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

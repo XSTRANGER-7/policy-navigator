@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import VCBadge from "@/components/VCBadge";
 import type { VerifiableCredential } from "@/types/credential";
@@ -121,8 +121,9 @@ function CitizenTab() {
   const [apps, setApps]             = useState<Application[]>([]);
   const [appsLoading, setAppsLoading] = useState(false);
 
-  async function lookup() {
-    const q = email.trim().toLowerCase();
+  async function lookup(targetEmail?: unknown) {
+    const rawEmail = typeof targetEmail === "string" ? targetEmail : email;
+    const q = (rawEmail || "").trim().toLowerCase();
     if (!q) return;
     setLoading(true);
     setResult(null);
@@ -142,6 +143,22 @@ function CitizenTab() {
       setAppsLoading(false);
     }
   }
+
+  // Restore saved email and lookup VC on mount
+  useEffect(() => {
+    try {
+      const savedProf = localStorage.getItem("civis_citizen_profile");
+      if (savedProf) {
+        const parsedProf = JSON.parse(savedProf);
+        if (parsedProf.email) {
+          setEmail(parsedProf.email);
+          lookup(parsedProf.email);
+        }
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -178,7 +195,7 @@ function CitizenTab() {
             onKeyDown={(e) => e.key === "Enter" && lookup()}
           />
           <button
-            onClick={lookup}
+            onClick={() => lookup()}
             disabled={loading || !email.trim()}
             className="civis-btn rounded-full whitespace-nowrap px-8"
           >

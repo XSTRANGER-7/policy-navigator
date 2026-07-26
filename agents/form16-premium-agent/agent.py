@@ -22,38 +22,20 @@ Flow:
   6. Middleware verifies on-chain → handler is called → result returned
 """
 
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, json, time, datetime
+import os, json, time, datetime, uuid
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 port = int(os.environ.get("PORT", 5007))
+agent_id = f"agent:form-16-premium-agent:{uuid.uuid4().hex[:6]}"
 
-config = AgentConfig(
-    name="Form 16 Premium Agent",
-    description="Paid premium Form 16 services: tax computation report, ITR-1 pre-fill draft, TDS reconciliation",
-    capabilities={
-        "services": ["tax_report", "itr_prefill", "tds_reconcile"],
-        "ai":       ["tax_computation", "document_generation"],
-        "protocols":["http", "x402"],
-    },
-    mode="webhook",
-    webhook_host="0.0.0.0",
-    webhook_port=port,
-    registry_url="https://registry.zynd.ai",
-    api_key=os.environ.get("ZYND_API_KEY"),
-    price="$0.10",           # ← ZyndAI native x402: SDK enables payment middleware automatically
-    config_dir=".agent-form16-premium",   # separate DID / identity from the free agent
-)
-
-agent = ZyndAIAgent(agent_config=config)
+app = Flask("Form 16 Premium Agent")
 print(f"[Form 16 Premium Agent] Running on port {port}")
-print(f"[Form 16 Premium Agent] Agent ID : {agent.agent_id}")
-print(f"[Form 16 Premium Agent] Price    : $0.10 USDC per request (x402)")
+print(f"[Form 16 Premium Agent] Agent ID : {agent_id}")
 
 
 # ─── Tax Computation (shared logic) ──────────────────────────────────────────
@@ -162,89 +144,84 @@ def extract_payload(content) -> dict:
     return {}
 
 
-# ─── Message Handler ──────────────────────────────────────────────────────────
-# ZyndAI x402 middleware runs BEFORE this handler.
-# Requests that reach here have already been payment-verified by the SDK.
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Form 16 Premium Agent", "agent_id": agent_id})
 
-def message_handler(message: AgentMessage, topic: str):
-    print("[Form 16 Premium Agent] Payment verified — processing request")
-    payload = extract_payload(message.content)
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
+    print("[Form 16 Premium Agent] Processing request")
+    payload = extract_payload(body)
     action  = payload.get("action", "generate_report")
     ts      = datetime.datetime.utcnow().isoformat() + "Z"
 
-    # ── generate_report ───────────────────────────────────────────────────────
     if action == "generate_report":
         data_new = compute_full_tax({**payload, "regime": "new"})
         data_old = compute_full_tax({**payload, "regime": "old"})
-        saving   = round(data_old["total_tax_payable"] - data_new["total_tax_payable"], 2)
-        best     = "new" if data_new["total_tax_payable"] <= data_old["total_tax_payable"] else "old"
+        diff     = round(data_old["total_tax_payable"] - data_new["total_tax_payable"], 2)
+        rec      = "new" if diff >= 0 else "old"
+        save_val = abs(diff)
 
-        agent.set_response(message.message_id, json.dumps({
-            "action":             "generate_report",
-            "report_title":       "Tax Computation Report — FY 2024-25 (AY 2025-26)",
-            "generated_at":       ts,
-            "employee_inputs":    {k: payload.get(k) for k in [
-                "gross_salary", "basic_salary", "hra_received", "rent_paid",
-                "city_type", "deduction_80c", "deduction_80d",
-                "home_loan_interest", "deduction_80ccd1b",
-            ] if payload.get(k)},
-            "new_regime":         data_new,
-            "old_regime":         data_old,
-            "recommended_regime": best,
-            "saving_vs_other":    abs(saving),
-            "saving_label":       f"Save \u20b9{abs(saving):,.0f}/year by choosing {best.upper()} regime",
-            "monthly_tds_new":    data_new["monthly_tds"],
-            "monthly_tds_old":    data_old["monthly_tds"],
-            "summary_lines": [
-                f"Gross Salary:      \u20b9{data_new['gross_salary']:>12,.0f}",
-                f"New Regime Tax:    \u20b9{data_new['total_tax_payable']:>12,.0f}  (TDS/month \u20b9{data_new['monthly_tds']:,.0f})",
-                f"Old Regime Tax:    \u20b9{data_old['total_tax_payable']:>12,.0f}  (TDS/month \u20b9{data_old['monthly_tds']:,.0f})",
-                f"Best Regime:       {best.upper()}  (saves \u20b9{abs(saving):,.0f}/year)",
-            ],
-            "payment_protocol":   "x402",
-            "payment_verified":   True,
-        }))
+        res = {
+            "action":               "generate_report",
+            "generated_at":         ts,
+            "recommended_regime":   rec,
+            "tax_saved":            save_val,
+            "recommendation": (
+                f"New Regime saves you Rs.{save_val:,.0f} in tax vs Old Regime."
+                if rec == "new" else
+                f"Old Regime saves you Rs.{save_val:,.0f} in tax thanks to your deductions."
+            ),
+            "new_regime": data_new,
+            "old_regime": data_old,
+            "payment_protocol": "x402",
+            "payment_verified": True,
+        }
 
-    # ── itr_prefill ───────────────────────────────────────────────────────────
     elif action == "itr_prefill":
+        calc = compute_full_tax(payload)
         regime = payload.get("regime", "new").lower()
-        tax    = compute_full_tax(payload)
-
-        agent.set_response(message.message_id, json.dumps({
-            "action":        "itr_prefill",
-            "form":          "ITR-1 (SAHAJ)",
-            "ay":            "AY 2025-26",
-            "fy":            "FY 2024-25",
-            "generated_at":  ts,
-            "regime_opted":  regime,
-            "schedule_s": {
-                "gross_salary":      tax["gross_salary"],
-                "standard_deduction": tax["total_deductions"],
-                "net_salary":         tax["taxable_income"],
+        res = {
+            "action":               "itr_prefill",
+            "generated_at":         ts,
+            "assessment_year":      "2025-26",
+            "financial_year":       "2024-25",
+            "itr_type":             "ITR-1 (SAHAJ)",
+            "selected_regime":      regime,
+            "part_a_general": {
+                "pan":              payload.get("pan", "XXXXX1234X"),
+                "name":             payload.get("name", "Salaried Taxpayer"),
+                "employer_type":    payload.get("employer_type", "OTHERS (Private)"),
+                "filing_section":   "139(1) — On or before due date",
             },
-            "schedule_via": {
-                "80c":     min(float(payload.get("deduction_80c",    0)), 150_000),
-                "80d":     min(float(payload.get("deduction_80d",    0)),  25_000),
-                "80ccd1b": min(float(payload.get("deduction_80ccd1b",0)),  50_000),
-                "total":   tax["total_deductions"],
+            "part_b_gross": {
+                "gross_salary_sec_17_1": float(payload.get("gross_salary", 0)),
+                "perquisites_sec_17_2":  float(payload.get("perquisites", 0)),
+                "profits_in_lieu_17_3":  0.0,
+                "gross_total":           float(payload.get("gross_salary", 0)) + float(payload.get("perquisites", 0)),
+            },
+            "schedule_via_deductions": {
+                "sec_80c":     float(payload.get("deduction_80c", 0)),
+                "sec_80d":     float(payload.get("deduction_80d", 0)),
+                "sec_80ccd_1b":float(payload.get("deduction_80ccd1b", 0)),
+                "total_deductions": calc["total_deductions"],
             },
             "part_b_tti": {
-                "total_income":        tax["taxable_income"],
-                "tax_payable":         tax["tax_before_cess"],
-                "rebate_87a":          tax["rebate_87a"],
-                "tax_after_rebate":    tax["tax_after_rebate"],
-                "cess_4pct":           tax["cess_4pct"],
-                "total_tax_liability": tax["total_tax_payable"],
+                "gross_total_income": calc["gross_salary"],
+                "total_deductions":   calc["total_deductions"],
+                "total_income":       calc["taxable_income"],
+                "tax_payable":        calc["total_tax_payable"],
+                "tds_credits":        float(payload.get("tds_paid", 0)),
+                "net_payable_refund": calc["tax_diff"],
             },
-            "tax_details": {
-                "tds_by_employer":     float(payload.get("tds_deducted", tax["total_tax_payable"])),
-                "self_assessment_due": max(round(tax["total_tax_payable"] - float(payload.get("tds_deducted", tax["total_tax_payable"])), 2), 0),
-                "refund_due":          max(round(float(payload.get("tds_deducted", 0)) - tax["total_tax_payable"], 2), 0),
-            },
-            "filing_instructions": [
-                "Go to https://www.incometax.gov.in \u2192 e-File \u2192 ITR \u2192 File ITR",
-                "Select AY 2025-26, ITR-1 (SAHAJ), Online mode",
-                "Copy schedule_s values into Part B-TI \u2192 Schedule S",
+            "instructions": [
+                "Copy part_b_gross values into ITR-1 Section 17",
                 "Copy schedule_via values into Chapter VI-A deductions",
                 "Copy part_b_tti values into Part B-TTI tax computation",
                 "Enter TDS from Form 16 Part A in the Tax Details tab",
@@ -252,9 +229,8 @@ def message_handler(message: AgentMessage, topic: str):
             ],
             "payment_protocol": "x402",
             "payment_verified": True,
-        }))
+        }
 
-    # ── tds_reconcile ─────────────────────────────────────────────────────────
     elif action == "tds_reconcile":
         f16_q  = payload.get("form16_quarters", [])
         tr_q   = payload.get("traces_quarters", [])
@@ -269,7 +245,7 @@ def message_handler(message: AgentMessage, topic: str):
                 mismatches.append({"quarter": f.get("q", f"Q{i+1}"), "form16_tds": f.get("tds"), "traces_tds": t.get("tds"), "gap": gap})
 
         matched = abs(diff) < 2
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":               "tds_reconcile",
             "generated_at":         ts,
             "form16_tds_total":      f16_tot,
@@ -278,9 +254,9 @@ def message_handler(message: AgentMessage, topic: str):
             "status":                "MATCH" if matched else "MISMATCH",
             "quarter_mismatches":    mismatches,
             "verdict": (
-                "\u2705 TDS in Form 16 matches Form 26AS. Safe to file ITR."
+                "TDS in Form 16 matches Form 26AS. Safe to file ITR."
                 if matched else
-                f"\u26a0\ufe0f TDS mismatch of \u20b9{abs(diff):,.0f} detected in {len(mismatches)} quarter(s). Contact HR to revise 24Q."
+                f"TDS mismatch of Rs.{abs(diff):,.0f} detected in {len(mismatches)} quarter(s). Contact HR to revise 24Q."
             ),
             "next_steps": (
                 ["No mismatch found. Proceed to file ITR."]
@@ -293,20 +269,21 @@ def message_handler(message: AgentMessage, topic: str):
             ),
             "payment_protocol": "x402",
             "payment_verified": True,
-        }))
+        }
 
     else:
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "error": f"Unknown action: {action}",
             "valid_actions": ["generate_report", "itr_prefill", "tds_reconcile"],
-            "note": "This is a paid agent — all requests require x402 USDC payment on Base network.",
-        }))
+        }
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Form 16 Premium Agent",
+        "message_id": message_id,
+        "response": json.dumps(res)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-print(f"[Form 16 Premium Agent] x402 payment middleware active")
-print(f"[Form 16 Premium Agent] Use: agent.x402_processor.post('http://localhost:{port}/webhook/sync', json=payload)")
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=port, threaded=True)

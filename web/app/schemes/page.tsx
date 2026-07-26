@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, Suspense } from "react";
@@ -16,6 +16,9 @@ interface Scheme {
   official_url: string | null;
   source: string | null;
   state_specific: boolean;
+  application_deadline?: string | null;
+  is_active?: boolean;
+  status_text?: string | null;
   scraped_at: string | null;
   created_at: string;
 }
@@ -32,6 +35,9 @@ interface ScrapedScheme {
   official_url?: string | null;
   source?: string | null;
   state_specific?: boolean;
+  application_deadline?: string | null;
+  is_active?: boolean;
+  status_text?: string | null;
 }
 
 interface ScrapeResult {
@@ -269,10 +275,11 @@ function SchemesInner() {
             <p className="font-black text-sm uppercase tracking-widest text-black/40 mb-4">Choose scrape source</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                { source: "builtin",  label: "Built-in Dataset",  icon: "📦", desc: "39 verified real schemes — instant, no network", fast: true },
-                { source: "myscheme", label: "myScheme.gov.in",    icon: "🏛️", desc: "Scrape individual scheme pages from the official portal", fast: false },
-                { source: "pmindia",  label: "PMIndia.gov.in",     icon: "🇮🇳", desc: "Scheme listings from PM India portal", fast: false },
-                { source: "all",      label: "All Sources",        icon: "🌐", desc: "Built-in + live scrape from all portals (slowest)", fast: false },
+                { source: "builtin",  label: "Built-in Dataset",      icon: "📦", desc: "39 verified real schemes — instant, no network", fast: true },
+                { source: "llm",      label: "AI Real-Time Discovery",icon: "🤖", desc: "AI-powered real-time scheme discovery + timeline deadlines", fast: true },
+                { source: "myscheme", label: "myScheme.gov.in",        icon: "🏛️", desc: "Scrape individual scheme pages from official portal", fast: false },
+                { source: "pmindia",  label: "PMIndia.gov.in",         icon: "🇮🇳", desc: "Scheme listings from PM India portal", fast: false },
+                { source: "all",      label: "All Sources",            icon: "🌐", desc: "Built-in + AI + live scrape from all portals", fast: false },
               ].map(({ source, label, icon, desc, fast }) => (
                 <button
                   key={source}

@@ -16,11 +16,10 @@ Actions handled via metadata.action:
   query            — Free-text FAQ (LLM-powered Indian income tax expert)
 """
 
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, json, time, math
+import os, json, time, math, uuid
 
 try:
     from openai import OpenAI as _OpenAI
@@ -35,22 +34,10 @@ port = int(os.environ.get("PORT", 5006))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 _llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
 
-config = AgentConfig(
-    name="Form 16 Agent",
-    description="Guides salaried employees through Form 16: understanding, tax calculation, TDS verification, and ITR-1 filing",
-    capabilities={
-        "services": ["form16_guide", "tax_calculator", "tds_verify", "itr_filing"],
-        "ai":       ["rule_engine", "tax_computation"],
-        "protocols":["http"],
-    },
-    mode="webhook",
-    webhook_host="0.0.0.0",
-    webhook_port=port,
-    registry_url="https://registry.zynd.ai",
-    api_key=os.environ.get("ZYND_API_KEY"),
-)
-agent = ZyndAIAgent(config)
-print(f"[Form 16 Agent] Running on port {port} | ID: {agent.agent_id}")
+agent_id = f"agent:form-16-agent:{uuid.uuid4().hex[:6]}"
+
+app = Flask("Form 16 Agent")
+print(f"[Form 16 Agent] Running on port {port} | ID: {agent_id}")
 
 
 
@@ -498,63 +485,60 @@ def handle_query(text: str) -> str:
     )
 
 
-# ─── Main Handler ──────────────────────────────────────────────────────────────
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Form 16 Agent", "agent_id": agent_id})
 
-def message_handler(message: AgentMessage, topic: str):
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
     print("[Form 16 Agent] Received request")
-    payload = extract_payload(message.content)
+    payload = extract_payload(body)
     action  = payload.get("action", "explain")
 
-    # ── explain ──
     if action == "explain":
-        sub = payload.get("sub", "what_is")   # what_is | part_a | part_b
-        agent.set_response(message.message_id, json.dumps({
+        sub = payload.get("sub", "what_is")
+        res = {
             "action": "explain",
             "sub":    sub,
             "content": EXPLAIN.get(sub, EXPLAIN["what_is"]).strip(),
-        }))
-
-    # ── tax_calc ──
+        }
     elif action == "tax_calc":
-        result = compute_full_tax(payload)
-        result["action"] = "tax_calc"
-        agent.set_response(message.message_id, json.dumps(result))
-
-    # ── section_guide ──
+        res = compute_full_tax(payload)
+        res["action"] = "tax_calc"
     elif action == "section_guide":
         section = payload.get("section", "80c").lower().replace("section", "").strip()
         info    = SECTION_GUIDE.get(section)
         if not info:
-            agent.set_response(message.message_id, json.dumps({
+            res = {
                 "error": f"Section '{section}' not found.",
                 "available": list(SECTION_GUIDE.keys()),
-            }))
+            }
         else:
-            agent.set_response(message.message_id, json.dumps({"action": "section_guide", "section": section, **info}))
-
-    # ── checklist ──
+            res = {"action": "section_guide", "section": section, **info}
     elif action == "checklist":
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":    "checklist",
             "checklist": CHECKLIST,
             "total":     len(CHECKLIST),
             "message":   "Keep all documents ready before starting ITR filing.",
-        }))
-
-    # ── filing_steps ──
+        }
     elif action == "filing_steps":
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":       "filing_steps",
             "steps":        FILING_STEPS,
             "total_steps":  len(FILING_STEPS),
             "deadline":     "July 31, 2025 (for AY 2025-26)",
-            "itr_form":     "Most salaried employees → ITR-1 (SAHAJ)",
+            "itr_form":     "Most salaried employees -> ITR-1 (SAHAJ)",
             "portal":       "https://www.incometax.gov.in",
-        }))
-
-    # ── tds_mismatch ──
+        }
     elif action == "tds_mismatch":
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action": "tds_mismatch",
             "problem": "Form 16 TDS amount does not match Form 26AS / AIS",
             "causes": [
@@ -571,10 +555,8 @@ def message_handler(message: AgentMessage, topic: str):
                 "6. ONLY then proceed to file ITR",
             ],
             "warning": "Do NOT file ITR with a mismatch. IT dept processes TDS from Form 26AS, not from Form 16. You may get a demand notice.",
-            "escalation": "If employer refuses/delays beyond June 30 before July 31 deadline, consult a CA or raise grievance at https://www.incometax.gov.in → e-Nivaran.",
-        }))
-
-    # ── two_employers ──
+            "escalation": "If employer refuses/delays beyond June 30 before July 31 deadline, consult a CA or raise grievance at https://www.incometax.gov.in -> e-Nivaran.",
+        }
     elif action == "two_employers":
         g1    = float(payload.get("gross_salary_1", 0))
         tds1  = float(payload.get("tds_1", 0))
@@ -584,7 +566,7 @@ def message_handler(message: AgentMessage, topic: str):
         combined_tds   = tds1 + tds2
         combined_result = compute_full_tax({**payload, "gross_salary": combined_gross})
         diff = round(combined_result["total_tax_payable"] - combined_tds, 2)
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":             "two_employers",
             "employer1_gross":    g1,
             "employer2_gross":    g2,
@@ -595,7 +577,7 @@ def message_handler(message: AgentMessage, topic: str):
             "tax_diff_label":     "Extra tax payable" if diff > 0 else "Refund due",
             "steps": [
                 "1. Collect Form 16 Part A + Part B from BOTH employers",
-                "2. Add both gross salaries → use as 'Gross Salary' in ITR",
+                "2. Add both gross salaries -> use as 'Gross Salary' in ITR",
                 "3. Standard Deduction (₹50K/₹75K) is given only ONCE in ITR — usually employer 2 omits it",
                 "4. Add TDS from both Form 16 Part A in the 'Tax Details' tab of ITR",
                 "5. If combined tax > total TDS paid: pay self-assessment tax before filing",
@@ -603,86 +585,77 @@ def message_handler(message: AgentMessage, topic: str):
             ],
             "portal": "https://www.incometax.gov.in",
             **{k: v for k, v in combined_result.items() if k != "gross_salary"},
-        }))
-
-    # ── download_guide ──
+        }
     elif action == "download_guide":
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":  "download_guide",
             "title":   "How to Download Form 16 from TRACES",
             "for_employee": [
                 "1. Ask your employer's HR/Finance team to download your Form 16 Part A from TRACES",
                 "2. TRACES: https://www.tdscpc.gov.in — only employers (with TAN) can log in",
-                "3. Employer credentials: TAN login → Form 16 → Enter your PAN → Download PDF",
+                "3. Employer credentials: TAN login -> Form 16 -> Enter your PAN -> Download PDF",
                 "4. The downloaded PDF has a unique certificate number — verify this is TRACES-generated (not just printed)",
                 "5. Open it with 'TRACES PDF Converter' tool (free, from TRACES website) if it requires a password",
             ],
             "for_employer": [
-                "Login to TRACES (TAN) → Statements/Payments → Form 16 → Annual Year → Employee PAN → Download",
+                "Login to TRACES (TAN) -> Statements/Payments -> Form 16 -> Annual Year -> Employee PAN -> Download",
                 "Use bulk download for multiple employees",
                 "Must be issued to employees by June 15 every year",
             ],
             "employee_self": [
                 "You CANNOT directly download Form 16 from IT portal as an employee",
-                "However, verify TDS via: IT portal → e-File → View Form 26AS",
-                "Also check: IT portal → AIS (Annual Information Statement) for all TDS entries",
+                "However, verify TDS via: IT portal -> e-File -> View Form 26AS",
+                "Also check: IT portal -> AIS (Annual Information Statement) for all TDS entries",
             ],
             "password_format": "TRACES PDF password = PAN in CAPITALS + Date of Birth in DDMMYYYY (e.g., ABCDE1234F01011985)",
-        }))
-
-    # ── hra_exempt ──
+        }
     elif action == "hra_exempt":
         basic       = float(payload.get("basic_salary", 0))
         hra_recv    = float(payload.get("hra_received", 0))
         rent        = float(payload.get("rent_paid", 0))
         city        = str(payload.get("city_type", "metro")).lower()
         if not basic or not hra_recv or not rent:
-            agent.set_response(message.message_id, json.dumps({
-                "error": "Provide basic_salary, hra_received, rent_paid, and city_type (metro/non-metro)"
-            }))
-            return
-        rule1  = hra_recv
-        rule2  = max(rent - 0.10 * basic, 0)
-        pct    = 0.50 if city == "metro" else 0.40
-        rule3  = pct * basic
-        exempt = round(min(rule1, rule2, rule3), 2)
-        agent.set_response(message.message_id, json.dumps({
-            "action":           "hra_exempt",
-            "rule1_hra_recvd":  round(rule1, 2),
-            "rule2_rent_minus_10pct_basic": round(rule2, 2),
-            "rule3_pct_basic":  round(rule3, 2),
-            "city_percentage":  f"{int(pct*100)}%",
-            "hra_exempt":       exempt,
-            "hra_taxable":      round(hra_recv - exempt, 2),
-            "note":             "Least of the three rules applies. Claim proofs: rent receipts + landlord PAN (if > ₹1L/year).",
-        }))
-
-    # ── query (free text FAQ) ──
+            res = {"error": "Provide basic_salary, hra_received, rent_paid, and city_type (metro/non-metro)"}
+        else:
+            rule1  = hra_recv
+            rule2  = max(rent - 0.10 * basic, 0)
+            pct    = 0.50 if city == "metro" else 0.40
+            rule3  = pct * basic
+            exempt = round(min(rule1, rule2, rule3), 2)
+            res = {
+                "action":           "hra_exempt",
+                "rule1_hra_recvd":  round(rule1, 2),
+                "rule2_rent_minus_10pct_basic": round(rule2, 2),
+                "rule3_pct_basic":  round(rule3, 2),
+                "city_percentage":  f"{int(pct*100)}%",
+                "hra_exempt":       exempt,
+                "hra_taxable":      round(hra_recv - exempt, 2),
+                "note":             "Least of the three rules applies. Claim proofs: rent receipts + landlord PAN (if > ₹1L/year).",
+            }
     elif action == "query":
         text = str(payload.get("text") or payload.get("question") or payload.get("q") or "")
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "action":   "query",
             "question": text,
             "answer":   handle_query(text),
-        }))
-
-
+        }
     else:
-        agent.set_response(message.message_id, json.dumps({
+        res = {
             "error":    f"Unknown action: {action}",
             "valid_actions": [
                 "explain", "tax_calc", "section_guide", "checklist",
                 "filing_steps", "tds_mismatch", "two_employers",
                 "download_guide", "hra_exempt", "query",
             ],
-            "premium_actions": [
-                "generate_report", "itr_prefill", "tds_reconcile",
-                ">> use /api/form16/premium (x402 ZyndAI paid agent)",
-            ],
-        }))
+        }
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Form 16 Agent",
+        "message_id": message_id,
+        "response": json.dumps(res)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=port, threaded=True)

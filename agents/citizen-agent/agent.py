@@ -1,60 +1,29 @@
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, time, json
-import requests
+import os, time, json, uuid, requests
 
 env_path = Path(__file__).resolve().parent.parent.parent / "agents" / ".env"
 load_dotenv(dotenv_path=env_path, override=False)
 load_dotenv(override=False)
 
 port = int(os.environ.get("PORT", 5000))
+agent_id = f"agent:citizen-agent:{uuid.uuid4().hex[:6]}"
 
-# On Railway: set these to the public Railway service URLs.
-# Locally: defaults to localhost ports.
 POLICY_AGENT_URL      = os.environ.get("POLICY_AGENT_URL",      "http://localhost:5001")
 ELIGIBILITY_AGENT_URL = os.environ.get("ELIGIBILITY_AGENT_URL", "http://localhost:5002")
 MATCHER_AGENT_URL     = os.environ.get("MATCHER_AGENT_URL",     "http://localhost:5003")
 CREDENTIAL_AGENT_URL  = os.environ.get("CREDENTIAL_AGENT_URL",  "http://localhost:5004")
 
-config = AgentConfig(
-    name="Citizen Agent",
-    description="Orchestrates the full policy-eligibility pipeline with partial match fallback",
-    capabilities={"ai": ["orchestration"], "protocols": ["http"], "services": ["policy_verification", "eligibility_check", "vc_issuance"]},
-    mode="webhook", webhook_host="0.0.0.0", webhook_port=port,
-    registry_url="https://registry.zynd.ai", api_key=os.environ.get("ZYND_API_KEY"),
-)
-
-agent = ZyndAIAgent(config)
-print(f"[Citizen Agent / Orchestrator] Running on port {port}")
-print(f"  Policy Agent      → {POLICY_AGENT_URL}")
-print(f"  Eligibility Agent → {ELIGIBILITY_AGENT_URL}")
-print(f"  Matcher Agent     → {MATCHER_AGENT_URL}")
-print(f"  Credential Agent  → {CREDENTIAL_AGENT_URL}")
+app = Flask("Citizen Agent")
 
 
 def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
-    """
-    Call a sub-agent with a sequence of fallbacks.
-
-    Order of attempts:
-    1. `base_url` supplied by the caller (module-level var)
-    2. Environment variable override for the same role (if present)
-       - e.g. if base_url contains '5001' this will look for `POLICY_AGENT_URL` etc.
-    3. Localhost default for the expected port (127.0.0.1:PORT)
-
-    This makes the orchestrator resilient when the supervisor or platform
-    provides public URLs, or when agents run in-container on localhost.
-    """
     attempts = []
 
-    # canonical first attempt (from caller)
     if base_url:
         attempts.append(base_url.rstrip("/"))
 
-    # attempt to use any matching env var for the same agent role
-    # discover role name by scanning common env var names
     role_env_candidates = [
         "POLICY_AGENT_URL",
         "ELIGIBILITY_AGENT_URL",
@@ -71,19 +40,17 @@ def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
             if val not in attempts:
                 attempts.append(val)
 
-    # final fallback: try localhost ports 5001-5007 (skip duplicates)
     for p in range(5001, 5008):
         candidate = f"http://127.0.0.1:{p}"
         if candidate not in attempts:
             attempts.append(candidate)
 
-    # Try each candidate URL until one succeeds
     last_err = None
     for base in attempts:
         url = base + "/webhook/sync"
         try:
             print(f"  [Citizen Agent] Trying sub-agent at {url}")
-            resp = requests.post(url, json={"prompt": json.dumps(data), "sender_id": agent.agent_id, "message_type": "query", "metadata": data}, timeout=timeout)
+            resp = requests.post(url, json={"prompt": json.dumps(data), "sender_id": agent_id, "message_type": "query", "metadata": data}, timeout=timeout)
             resp.raise_for_status()
             result = resp.json()
             response = result.get("response", {})
@@ -102,7 +69,6 @@ def call_sub_agent(base_url: str, data: dict, timeout: int = 25) -> any:
             last_err = exc
             continue
 
-    # If nothing worked, return a structured error
     return {"error": f"All sub-agent endpoints unreachable (last error: {str(last_err)})"}
 
 
@@ -126,11 +92,22 @@ def extract_citizen_profile(content: any) -> dict:
     return {}
 
 
-def message_handler(message: AgentMessage, topic: str):
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Citizen Agent", "agent_id": agent_id})
+
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
     print("\n" + "=" * 52)
     print("[Citizen Agent] New request received")
 
-    citizen = extract_citizen_profile(message.content)
+    citizen = extract_citizen_profile(body)
     print(f"  Profile: {citizen}")
 
     pipeline = []
@@ -142,10 +119,9 @@ def message_handler(message: AgentMessage, topic: str):
     pipeline.append({"step": "policy_fetch", "count": len(schemes), "ok": bool(schemes)})
     print(f"        Got {len(schemes)} schemes")
 
-    # Step 2 — Evaluate eligibility (returns ALL schemes with eligible flag)
+    # Step 2 — Evaluate eligibility
     print("  [2/4] Checking eligibility...")
     raw_all = call_sub_agent(ELIGIBILITY_AGENT_URL, {"citizen": citizen, "schemes": schemes, "return_all": True})
-    # Handle both new shape {all_evaluated, llm_summary, llm_advice} and legacy plain list
     if isinstance(raw_all, dict):
         all_evaluated = raw_all.get("all_evaluated", [])
         llm_summary   = raw_all.get("llm_summary", "")
@@ -159,7 +135,6 @@ def message_handler(message: AgentMessage, topic: str):
     pipeline.append({"step": "eligibility_check", "count": len(eligible_schemes), "ok": True})
     print(f"        Eligible: {len(eligible_schemes)}, Partial: {len(partial_schemes)}")
 
-    # Decide what to rank: eligible first; if none use top partial matches
     schemes_to_rank = eligible_schemes if eligible_schemes else partial_schemes[:6]
     using_partial   = len(eligible_schemes) == 0 and bool(partial_schemes)
 
@@ -170,7 +145,7 @@ def message_handler(message: AgentMessage, topic: str):
     pipeline.append({"step": "scheme_ranking", "count": len(ranked_schemes), "ok": bool(ranked_schemes)})
     print(f"        Ranked: {len(ranked_schemes)}")
 
-    # Step 4 — VC (only if genuinely eligible)
+    # Step 4 — VC
     vc = None
     if eligible_schemes:
         print("  [4/4] Issuing Verifiable Credential...")
@@ -181,7 +156,6 @@ def message_handler(message: AgentMessage, topic: str):
         pipeline.append({"step": "vc_issuance", "count": 0, "ok": False})
         print("  [4/4] No VC — no eligible schemes")
 
-    # Summary
     if using_partial:
         summary = f"No exact matches found. Showing {len(ranked_schemes)} nearest partial matches."
     elif len(eligible_schemes) == 1:
@@ -199,15 +173,24 @@ def message_handler(message: AgentMessage, topic: str):
         "summary":          summary,
         "total_eligible":   len(eligible_schemes),
         "pipeline":         pipeline,
-        "agent_id":         agent.agent_id,
+        "agent_id":         agent_id,
         "llm_summary":      llm_summary,
         "llm_advice":       llm_advice,
     }
     print("[Citizen Agent] Done.\n")
-    agent.set_response(message.message_id, json.dumps(result))
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Citizen Agent",
+        "message_id": message_id,
+        "response": json.dumps(result)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    print(f"[Citizen Agent / Orchestrator] Running on port {port}")
+    print(f"  Policy Agent      -> {POLICY_AGENT_URL}")
+    print(f"  Eligibility Agent -> {ELIGIBILITY_AGENT_URL}")
+    print(f"  Matcher Agent     -> {MATCHER_AGENT_URL}")
+    print(f"  Credential Agent  -> {CREDENTIAL_AGENT_URL}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

@@ -1,8 +1,7 @@
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, time, json
+import os, time, json, uuid
 
 try:
     from openai import OpenAI as _OpenAI
@@ -16,6 +15,10 @@ load_dotenv(dotenv_path=env_path)
 port = int(os.environ.get("PORT", 5002))
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 _llm = _OpenAI(api_key=OPENAI_API_KEY) if (_openai_available and OPENAI_API_KEY) else None
+
+agent_id = f"agent:eligibility-agent:{uuid.uuid4().hex[:6]}"
+
+app = Flask("Eligibility Agent")
 
 
 def llm_explain_eligibility(citizen: dict, eligible: list, ineligible: list) -> dict:
@@ -50,24 +53,6 @@ def llm_explain_eligibility(citizen: dict, eligible: list, ineligible: list) -> 
     except Exception as e:
         print(f"[Eligibility Agent][LLM] {e}")
         return {}
-
-config = AgentConfig(
-    name="Eligibility Agent",
-    description="Evaluates citizen eligibility for all schemes using a multi-criteria rule engine",
-    capabilities={
-        "services": ["eligibility_check"],
-        "ai": ["rule_engine"],
-        "protocols": ["http"]
-    },
-    mode="webhook",
-    webhook_host="0.0.0.0",
-    webhook_port=port,
-    registry_url="https://registry.zynd.ai",
-    api_key=os.environ.get("ZYND_API_KEY")
-)
-
-agent = ZyndAIAgent(config)
-print(f"[Eligibility Agent] Running on port {port} | ID: {agent.agent_id}")
 
 
 def check_scheme_eligibility(citizen: dict, scheme: dict) -> dict:
@@ -126,24 +111,46 @@ def extract_data(content):
             content = json.loads(content)
         except Exception:
             return {}, []
+    if isinstance(content, dict):
+        if "prompt" in content:
+            try:
+                parsed = json.loads(content["prompt"])
+                content = parsed.get("metadata", parsed)
+            except Exception:
+                pass
     data = content.get("metadata", content)
     return data.get("citizen", data), data.get("schemes", [])
 
 
-def message_handler(message: AgentMessage, topic: str):
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Eligibility Agent", "agent_id": agent_id})
+
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
     print("[Eligibility Agent] Evaluating eligibility")
-    citizen, schemes = extract_data(message.content)
-    data_raw = message.content
-    if isinstance(data_raw, str):
-        try: data_raw = json.loads(data_raw)
+    citizen, schemes = extract_data(body)
+    data_raw = body
+    if isinstance(data_raw, dict) and "prompt" in data_raw:
+        try: data_raw = json.loads(data_raw["prompt"])
         except: pass
     if isinstance(data_raw, dict):
         data_raw = data_raw.get("metadata", data_raw)
     return_all = data_raw.get("return_all", False) if isinstance(data_raw, dict) else False
 
     if not schemes:
-        agent.set_response(message.message_id, json.dumps([]))
-        return
+        return jsonify({
+            "status": "ok",
+            "agent": "Eligibility Agent",
+            "message_id": message_id,
+            "response": json.dumps([])
+        })
 
     results = [check_scheme_eligibility(citizen, s) for s in schemes]
     eligible = [r for r in results if r["eligible"]]
@@ -161,17 +168,21 @@ def message_handler(message: AgentMessage, topic: str):
             "llm_summary":   llm_insight.get("summary", ""),
             "llm_advice":    llm_insight.get("advice", ""),
         }
-        agent.set_response(message.message_id, json.dumps(payload))
     else:
         payload = {
             "eligible":    eligible,
             "llm_summary": llm_insight.get("summary", ""),
             "llm_advice":  llm_insight.get("advice", ""),
         }
-        agent.set_response(message.message_id, json.dumps(payload))
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Eligibility Agent",
+        "message_id": message_id,
+        "response": json.dumps(payload)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    print(f"[Eligibility Agent] Running on port {port} | ID: {agent_id}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

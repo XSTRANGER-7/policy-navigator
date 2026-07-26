@@ -1,7 +1,7 @@
-# ============================================================
-#  POLICY NAVIGATOR — Start All Agents
+# ------------------------------------------------------------
+#  POLICY NAVIGATOR -- Start All Agents
 #  Run this from the project root:  .\start-agents.ps1
-# ============================================================
+# ------------------------------------------------------------
 
 $ROOT   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PYTHON = "$ROOT\.venv\Scripts\python.exe"
@@ -12,7 +12,7 @@ if (-not (Test-Path $PYTHON)) {
     exit 1
 }
 
-# ── Agents definition ──────────────────────────────────────
+# -- Agents definition --------------------------------------
 $AGENTS = @(
     @{ port=5001; label="Policy Agent";           script="agents/policy-agent/agent.py" },
     @{ port=5002; label="Eligibility Agent";      script="agents/eligibility-agent/agent.py" },
@@ -21,16 +21,16 @@ $AGENTS = @(
     @{ port=5005; label="Apply Agent";            script="agents/apply-agent/agent.py" },
     @{ port=5006; label="Form 16 Agent";          script="agents/form16-agent/agent.py" },
     @{ port=5007; label="Form 16 Premium (x402)"; script="agents/form16-premium-agent/agent.py" },
-    @{ port=5000; label="Orchestrator";           script="n8n/workflows/agent.py" }   # start last
+    @{ port=5000; label="Orchestrator";           script="agents/citizen-agent/agent.py" }   # start last
 )
 
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  POLICY NAVIGATOR — Agent Launcher" -ForegroundColor Cyan
+Write-Host "  POLICY NAVIGATOR -- Agent Launcher" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Kill existing processes on agent ports ─────────────────
+# -- Kill existing processes on agent ports -----------------
 Write-Host "Clearing old processes on ports 5000-5007..." -ForegroundColor Yellow
 foreach ($port in 5000..5007) {
     $pids = (netstat -ano 2>$null | Select-String ":$port " | Select-String "LISTENING") |
@@ -43,7 +43,7 @@ foreach ($port in 5000..5007) {
 }
 Start-Sleep -Seconds 1
 
-# ── Load .env vars into current process environment ────────
+# -- Load .env vars into current process environment --------
 foreach ($envFile in @("$ROOT\agents\.env", "$ROOT\.env")) {
     if (Test-Path $envFile) {
         Get-Content $envFile | Where-Object { $_ -match '^\s*[^#=].*=.*' } | ForEach-Object {
@@ -55,7 +55,7 @@ foreach ($envFile in @("$ROOT\agents\.env", "$ROOT\.env")) {
     }
 }
 
-# ── Launch each agent via cmd wrapper so PORT is isolated ──
+# -- Launch each agent via cmd wrapper so PORT is isolated --
 $procs = @()
 foreach ($agent in $AGENTS) {
     $port   = $agent.port
@@ -63,7 +63,7 @@ foreach ($agent in $AGENTS) {
     $script = "$ROOT\$($agent.script)"
 
     if (-not (Test-Path $script)) {
-        Write-Host "  SKIP  $label — script not found ($script)" -ForegroundColor Red
+        Write-Host "  SKIP  $label -- script not found ($script)" -ForegroundColor Red
         continue
     }
 
@@ -84,7 +84,7 @@ Write-Host ""
 Write-Host "Waiting for agents to initialise..." -ForegroundColor Yellow
 Start-Sleep -Seconds 6
 
-# ── Health check ───────────────────────────────────────────
+# -- Health check -------------------------------------------
 Write-Host ""
 Write-Host "Health check:" -ForegroundColor Cyan
 $allOk = $true
@@ -94,7 +94,7 @@ foreach ($agent in $AGENTS) {
     if ($ok) {
         Write-Host ("  [ok]  port {0}  {1}" -f $port, $agent.label) -ForegroundColor Green
     } else {
-        Write-Host ("  [!!]  port {0}  {1}  — NOT RESPONDING" -f $port, $agent.label) -ForegroundColor Red
+        Write-Host ("  [!!]  port {0}  {1}  -- NOT RESPONDING" -f $port, $agent.label) -ForegroundColor Red
         $allOk = $false
     }
 }
@@ -112,5 +112,5 @@ Write-Host "Frontend runs at:        http://localhost:3000" -ForegroundColor Cya
 Write-Host ""
 Write-Host "Press Ctrl+C to stop watching (agents keep running in background)." -ForegroundColor DarkGray
 
-# Keep process table visible (optional — remove if you don't want the window to stay)
+# Keep process table visible (optional -- remove if you don't want the window to stay)
 Read-Host "Press ENTER to exit this window"

@@ -18,6 +18,10 @@ export interface EligibleScheme {
   eligibility_text: string;
   ministry?: string;
   official_url?: string;
+  application_deadline?: string;
+  is_active?: boolean;
+  status_text?: string;
+  scraped_at?: string;
 }
 
 export interface RankedScheme extends EligibleScheme {

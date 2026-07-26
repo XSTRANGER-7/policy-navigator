@@ -22,17 +22,21 @@ export async function POST(req: Request) {
       );
     }
 
+    const effectiveEmail = email?.trim()
+      ? email.trim().toLowerCase()
+      : `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}@civis.local`;
+
     // ── 1. Persist citizen profile ────────────────────────────────────────
     let citizenId:  string | null = null;
     let savedToDB   = false;
     let verifiedOk  = false;
 
-    if (supabaseConfigured && email) {
+    if (supabaseConfigured) {
       try {
         const { data: citizen, error } = await supabaseServer
           .from("citizens")
           .insert([{
-            email:    email.trim().toLowerCase(),
+            email:    effectiveEmail,
             age:      Number(age),
             income:   Number(income),
             state:    state || null,

@@ -87,6 +87,23 @@ export default function SchemeDetailModal({
             <p className="font-black text-lg text-black leading-snug">{scheme.benefits}</p>
           </div>
 
+          {/* Timeline / Application Deadline */}
+          <div className="bg-yellow-50 border-3 border-yellow-400 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-yellow-800">Application Timeline / Deadline</p>
+              <p className="font-black text-base text-yellow-950 mt-0.5">
+                🕒 {scheme.application_deadline ?? "Ongoing / Open"}
+              </p>
+            </div>
+            <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full border ${
+              (scheme.status_text ?? "Active").toLowerCase() === "active"
+                ? "bg-green-100 text-green-800 border-green-300"
+                : "bg-red-100 text-red-800 border-red-300"
+            }`}>
+              Status: {scheme.status_text ?? "Active"}
+            </span>
+          </div>
+
           {/* Eligibility criteria */}
           <div className="bg-white border-3 border-black rounded-2xl p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-black/50 mb-1">

@@ -192,7 +192,7 @@ class ZyndAIAgent:
         t = threading.Thread(target=_run, daemon=True, name=f"{self.config.name}-server")
         t.start()
         print(
-            f"[{self.config.name}] HTTP server started → "
+            f"[{self.config.name}] HTTP server started -> "
             f"http://{self.config.webhook_host}:{self.config.webhook_port}"
         )
 

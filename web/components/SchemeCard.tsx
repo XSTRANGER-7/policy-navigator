@@ -28,6 +28,8 @@ interface SchemeCardProps {
   isPartialMatch?: boolean;
   isApplied?: boolean;
   applicationStatus?: string;
+  applicationDeadline?: string;
+  statusText?: string;
   onDetails?: () => void;
   onApply?: () => void;
 }
@@ -43,6 +45,8 @@ export default function SchemeCard({
   isPartialMatch = false,
   isApplied = false,
   applicationStatus,
+  applicationDeadline,
+  statusText = "Active",
   onDetails,
   onApply,
 }: SchemeCardProps) {
@@ -61,16 +65,33 @@ export default function SchemeCard({
         </span>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
             <h3 className="font-black text-xl uppercase tracking-tight text-black leading-tight">
               {name}
             </h3>
-            {score !== undefined && (
-              <span className="flex-shrink-0 bg-black text-[#d9ff00] text-[10px] font-black uppercase px-2 py-1 rounded-full">
-                {score}% match
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {statusText && (
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 border rounded-full ${
+                  statusText.toLowerCase() === "active" ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"
+                }`}>
+                  {statusText}
+                </span>
+              )}
+              {score !== undefined && (
+                <span className="flex-shrink-0 bg-black text-[#d9ff00] text-[10px] font-black uppercase px-2 py-1 rounded-full">
+                  {score}% match
+                </span>
+              )}
+            </div>
           </div>
+
+          {/* Timeline / Deadline chip */}
+          {applicationDeadline && (
+            <div className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 bg-yellow-100 border border-yellow-300 text-yellow-900 rounded-md mb-2">
+              <span>🕒 Deadline:</span>
+              <span>{applicationDeadline}</span>
+            </div>
+          )}
 
           {description && (
             <p className="text-black/60 mt-1 text-sm font-bold leading-snug">{description}</p>

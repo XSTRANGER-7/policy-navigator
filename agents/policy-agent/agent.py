@@ -1,8 +1,7 @@
-from zyndai_agent.agent import AgentConfig, ZyndAIAgent
-from zyndai_agent.message import AgentMessage
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from pathlib import Path
-import os, time, json
+import os, time, json, uuid
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -11,15 +10,9 @@ port = int(os.environ.get("PORT", 5001))
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
-config = AgentConfig(
-    name="Policy Agent",
-    description="Provides the complete government scheme database with eligibility rules",
-    capabilities={"services": ["policy_rules", "scheme_database"], "ai": ["policy_lookup"], "protocols": ["http"]},
-    mode="webhook", webhook_host="0.0.0.0", webhook_port=port,
-    registry_url="https://registry.zynd.ai", api_key=os.environ.get("ZYND_API_KEY")
-)
-agent = ZyndAIAgent(config)
-print(f"[Policy Agent] Running on port {port} | ID: {agent.agent_id}")
+agent_id = f"agent:policy-agent:{uuid.uuid4().hex[:6]}"
+
+app = Flask("Policy Agent")
 
 # Hardcoded fallback (always up-to-date)
 SCHEMES_FALLBACK = [
@@ -121,23 +114,45 @@ def fetch_schemes_from_supabase() -> list:
                 "description": row.get("description"), "benefits": row.get("benefits"),
                 "eligibility_text": row.get("eligibility_text"), "rules": rules,
                 "ministry": row.get("ministry", ""), "official_url": row.get("official_url", ""),
+                "application_deadline": row.get("application_deadline") or "Ongoing / Open",
+                "status_text": row.get("status_text") or "Active",
+                "is_active": row.get("is_active", True),
+                "scraped_at": row.get("scraped_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             })
-        print(f"[Policy Agent] Loaded {len(normalized)} schemes from Supabase")
-        return normalized
+        # Filter out inactive or discontinued schemes
+        active_schemes = [s for s in normalized if s.get("is_active", True) and s.get("status_text") != "Discontinued"]
+        print(f"[Policy Agent] Loaded {len(active_schemes)} active schemes from Supabase")
+        return active_schemes
     except Exception as e:
         print(f"[Policy Agent] Supabase unavailable, using fallback: {e}")
         return []
 
 
-def message_handler(message: AgentMessage, topic: str):
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "agent": "Policy Agent", "agent_id": agent_id})
+
+
+@app.post("/webhook")
+@app.post("/webhook/sync")
+@app.post("/process")
+def process():
+    body = request.get_json(force=True, silent=True) or {}
+    message_id = body.get("message_id") or str(uuid.uuid4())
+
     schemes = fetch_schemes_from_supabase()
     if not schemes:
         print(f"[Policy Agent] Using hardcoded fallback ({len(SCHEMES_FALLBACK)} schemes)")
         schemes = SCHEMES_FALLBACK
-    agent.set_response(message.message_id, json.dumps(schemes))
+
+    return jsonify({
+        "status": "ok",
+        "agent": "Policy Agent",
+        "message_id": message_id,
+        "response": json.dumps(schemes)
+    })
 
 
-agent.add_message_handler(message_handler)
-
-while True:
-    time.sleep(60)
+if __name__ == "__main__":
+    print(f"[Policy Agent] Running on port {port} | ID: {agent_id}")
+    app.run(host="0.0.0.0", port=port, threaded=True)

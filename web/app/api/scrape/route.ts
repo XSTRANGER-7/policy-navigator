@@ -45,7 +45,11 @@ export async function POST(req: Request) {
     let stdout = "";
     let stderr = "";
     try {
-      const result = await execFileAsync(python, args, { timeout, encoding: "utf8" });
+      const result = await execFileAsync(python, args, {
+        timeout,
+        encoding: "utf8",
+        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+      });
       stdout = result.stdout;
       stderr = result.stderr;
     } catch (err: unknown) {
@@ -106,10 +110,12 @@ export async function POST(req: Request) {
         rules:            s.rules ?? {},
         ministry:         s.ministry ?? null,
         official_url:     s.official_url ?? null,
-        source:           s.source ?? "scraped",
-        state_specific:   s.state_specific ?? false,
-        scraped_at:       new Date().toISOString(),
-        is_active:        true,
+        source:               s.source ?? "scraped",
+        state_specific:       s.state_specific ?? false,
+        scraped_at:           s.scraped_at ?? new Date().toISOString(),
+        is_active:            s.is_active ?? true,
+        status_text:          s.status_text ?? "Active",
+        application_deadline: s.application_deadline ?? "Ongoing / Open",
       }));
 
       for (let i = 0; i < rows.length; i += 50) {

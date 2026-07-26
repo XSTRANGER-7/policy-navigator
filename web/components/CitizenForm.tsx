@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SchemeCard from "@/components/SchemeCard";
 import VCBadge from "@/components/VCBadge";
 import SchemeDetailModal from "@/components/SchemeDetailModal";
@@ -37,11 +37,49 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
   const [detailScheme, setDetailScheme] = useState<RankedScheme | null>(null);
   const [applyScheme,  setApplyScheme]  = useState<RankedScheme | null>(null);
 
+  // Restore saved citizen profile, VC, and eligibility results from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedProf = localStorage.getItem("civis_citizen_profile");
+      if (savedProf) {
+        const parsedProf = JSON.parse(savedProf);
+        setForm((prev) => ({
+          ...prev,
+          email: parsedProf.email || "",
+          age: String(parsedProf.age || ""),
+          income: String(parsedProf.income || ""),
+          state: parsedProf.state || "",
+          category: parsedProf.category || prev.category,
+        }));
+      }
+
+      const savedCId = localStorage.getItem("civis_citizen_id");
+      if (savedCId) setCitizenId(savedCId);
+
+      const savedRes = localStorage.getItem("civis_eligibility_result");
+      if (savedRes) {
+        const parsedRes = JSON.parse(savedRes);
+        setIsVerified(true);
+        setSavedToDB(true);
+        setResult({ kind: "success", data: parsedRes });
+      }
+    } catch {
+      /* ignore storage parse errors */
+    }
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setResult(null);
     setSavedToDB(false);
+
+    // Persist form inputs locally immediately
+    try {
+      localStorage.setItem("civis_citizen_profile", JSON.stringify(form));
+    } catch {
+      /* ignore storage errors */
+    }
 
     // Single call: saves citizen + runs pipeline + saves VC — all in /api/agent
     try {
@@ -62,17 +100,26 @@ export default function CitizenForm({ defaultCategory = "" }: { defaultCategory?
         setResult({ kind: "error", message: d.error || "Agent returned an error" });
       } else {
         if (d.saved_to_db) setSavedToDB(true);
-        if (d.citizen_id)  setCitizenId(d.citizen_id);
+        if (d.citizen_id) {
+          setCitizenId(d.citizen_id);
+          try { localStorage.setItem("civis_citizen_id", d.citizen_id); } catch {}
+        }
         const resp = d.response;
         if (resp && typeof resp === "object" && "ranked_schemes" in resp) {
           const pipeline = resp as AgentPipelineResponse;
-          // Mark as verified whenever we got eligibility results back,
-          // regardless of whether a VC was saved to Supabase.
           const hasSchemes =
             (pipeline.ranked_schemes?.length ?? 0) > 0 ||
             (pipeline.eligible_schemes?.length ?? 0) > 0;
           if (d.verified || hasSchemes) setIsVerified(true);
           setResult({ kind: "success", data: pipeline });
+
+          // Save eligibility result & VC permanently to localStorage
+          try {
+            localStorage.setItem("civis_eligibility_result", JSON.stringify(pipeline));
+            if (pipeline.vc) {
+              localStorage.setItem("civis_vc", JSON.stringify(pipeline.vc));
+            }
+          } catch {}
         } else if (typeof resp === "string") {
           setResult({ kind: "plain", text: resp });
         } else {
@@ -339,8 +386,8 @@ function PipelineResults({
         </div>
       )}
 
-      {/* VC Badge */}
-      {vc && !isPartial && <VCBadge vc={vc} />}
+      {/* VC Badge — Always displayed for eligibility proof */}
+      {vc && <VCBadge vc={vc} />}
 
       {/* My Applications Panel */}
       <MyApplicationsPanel
