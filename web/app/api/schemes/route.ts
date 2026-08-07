@@ -1,19 +1,77 @@
 import { NextResponse } from "next/server";
 import { supabaseServer, supabaseConfigured } from "@/lib/serverSupabase";
+import { BUILTIN_SCHEMES, BuiltinScheme } from "@/lib/builtinSchemes";
+
+/** In-memory filtering helper for builtin fallback dataset */
+function filterBuiltinSchemes(params: {
+  category: string | null;
+  ministry: string | null;
+  source: string | null;
+  stateSpec: string | null;
+  q: string | null;
+  page: number;
+  limit: number;
+}) {
+  const { category, ministry, source, stateSpec, q, page, limit } = params;
+
+  let filtered: BuiltinScheme[] = [...BUILTIN_SCHEMES];
+
+  if (category) {
+    filtered = filtered.filter((s) => s.category.toLowerCase() === category.toLowerCase());
+  }
+
+  if (source) {
+    filtered = filtered.filter(
+      (s) => s.source && s.source.toLowerCase().includes(source.toLowerCase())
+    );
+  }
+
+  if (ministry) {
+    filtered = filtered.filter(
+      (s) => s.ministry && s.ministry.toLowerCase().includes(ministry.toLowerCase())
+    );
+  }
+
+  if (stateSpec === "true") {
+    filtered = filtered.filter((s) => s.state_specific === true);
+  } else if (stateSpec === "false") {
+    filtered = filtered.filter((s) => s.state_specific === false);
+  }
+
+  if (q) {
+    const qLower = q.toLowerCase();
+    filtered = filtered.filter(
+      (s) =>
+        s.name.toLowerCase().includes(qLower) ||
+        (s.description && s.description.toLowerCase().includes(qLower)) ||
+        (s.benefits && s.benefits.toLowerCase().includes(qLower)) ||
+        (s.ministry && s.ministry.toLowerCase().includes(qLower))
+    );
+  }
+
+  const total = filtered.length;
+  const from = (page - 1) * limit;
+  const pagedSchemes = filtered.slice(from, from + limit);
+
+  const sources = [...new Set(BUILTIN_SCHEMES.map((s) => s.source).filter(Boolean))] as string[];
+  const ministries = [...new Set(BUILTIN_SCHEMES.map((s) => s.ministry).filter(Boolean))] as string[];
+  const categories = [...new Set(BUILTIN_SCHEMES.map((s) => s.category).filter(Boolean))] as string[];
+
+  return {
+    schemes: pagedSchemes,
+    total,
+    page,
+    limit,
+    sources,
+    ministries,
+    categories,
+    fallback: true,
+  };
+}
 
 /**
  * GET /api/schemes
- * Returns scraped + seeded government schemes from Supabase.
- *
- * Query params:
- *   ?category=farmer          — filter by category
- *   ?ministry=Education       — filter by ministry (partial match)
- *   ?source=myscheme.gov.in   — filter by scraper source
- *   ?state_specific=true      — only state-specific schemes
- *   ?q=kisan                  — text search
- *   ?limit=50                 — max results (default 100)
- *   ?page=1                   — pagination (default 1)
- *   ?sort=name|scraped_at|created_at  — sort field (default name)
+ * Returns scraped + seeded government schemes from Supabase, or built-in fallback.
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -28,113 +86,91 @@ export async function GET(req: Request) {
   const sort         = searchParams.get("sort") ?? "name";
   const from         = (page - 1) * limit;
 
-  if (!supabaseConfigured) {
-    return NextResponse.json({ error: "Supabase not configured", schemes: [], total: 0 }, { status: 503 });
-  }
+  if (supabaseConfigured) {
+    try {
+      const FULL_COLS =
+        "id, name, category, description, benefits, eligibility_text, rules, ministry, official_url, source, state_specific, scraped_at, is_active, created_at";
+      const BASE_COLS =
+        "id, name, category, description, benefits, eligibility_text, rules, ministry, official_url, is_active, created_at";
 
-  try {
-    // Detect which columns exist by trying the full query first, then falling
-    // back to the base columns if new ones (source / state_specific / scraped_at)
-    // have not been migrated yet.
-    const FULL_COLS =
-      "id, name, category, description, benefits, eligibility_text, rules, ministry, official_url, source, state_specific, scraped_at, is_active, created_at";
-    const BASE_COLS =
-      "id, name, category, description, benefits, eligibility_text, rules, ministry, official_url, is_active, created_at";
+      async function buildQuery(cols: string) {
+        let qb = supabaseServer
+          .from("schemes")
+          .select(cols, { count: "exact" });
 
-    async function buildQuery(cols: string) {
-      let qb = supabaseServer
-        .from("schemes")
-        .select(cols, { count: "exact" })
-        .eq("is_active", true);
+        if (category)             qb = qb.eq("category", category);
+        if (cols.includes("state_specific")) {
+          if (stateSpec === "true")  qb = qb.eq("state_specific", true);
+          if (stateSpec === "false") qb = qb.eq("state_specific", false);
+        }
+        if (cols.includes("source") && source) qb = qb.eq("source", source);
+        if (ministry)             qb = qb.ilike("ministry", `%${ministry}%`);
+        if (q)                    qb = qb.or(`name.ilike.%${q}%,description.ilike.%${q}%,benefits.ilike.%${q}%,ministry.ilike.%${q}%`);
 
-      if (category)             qb = qb.eq("category", category);
-      // Only apply new-column filters when those columns exist
-      if (cols.includes("state_specific")) {
-        if (stateSpec === "true")  qb = qb.eq("state_specific", true);
-        if (stateSpec === "false") qb = qb.eq("state_specific", false);
+        const validSorts = ["name", "scraped_at", "created_at"];
+        const sortField = validSorts.includes(sort) ? sort : "name";
+        const actualSort = sortField === "scraped_at" && !cols.includes("scraped_at") ? "created_at" : sortField;
+        qb = qb.order(actualSort, { ascending: actualSort === "name" });
+        qb = qb.range(from, from + limit - 1);
+        return qb;
       }
-      if (cols.includes("source") && source) qb = qb.eq("source", source);
-      if (ministry)             qb = qb.ilike("ministry", `%${ministry}%`);
-      if (q)                    qb = qb.or(`name.ilike.%${q}%,description.ilike.%${q}%,benefits.ilike.%${q}%,ministry.ilike.%${q}%`);
 
-      const validSorts = ["name", "scraped_at", "created_at"];
-      const sortField = validSorts.includes(sort) ? sort : "name";
-      const actualSort = sortField === "scraped_at" && !cols.includes("scraped_at") ? "created_at" : sortField;
-      qb = qb.order(actualSort, { ascending: actualSort === "name" });
-      qb = qb.range(from, from + limit - 1);
-      return qb;
+      let result = await (await buildQuery(FULL_COLS));
+
+      if (result.error?.message?.includes("column") && result.error.message.includes("does not exist")) {
+        result = await (await buildQuery(BASE_COLS));
+      }
+
+      const { data, error, count } = result;
+
+      if (!error && data && data.length > 0) {
+        let sources: string[]    = [];
+        let ministries: string[] = [];
+        let categories: string[] = [];
+
+        const metaFull = await supabaseServer
+          .from("schemes")
+          .select("category, source, ministry");
+
+        if (metaFull.error?.message?.includes("does not exist")) {
+          const metaBase = await supabaseServer
+            .from("schemes")
+            .select("category, ministry");
+          const rows = metaBase.data ?? [];
+          ministries = [...new Set(rows.map((r) => r.ministry).filter(Boolean))].sort();
+          categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort();
+        } else {
+          const rows = metaFull.data ?? [];
+          sources    = [...new Set(rows.map((r) => r.source).filter(Boolean))].sort();
+          ministries = [...new Set(rows.map((r) => r.ministry).filter(Boolean))].sort();
+          categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort();
+        }
+
+        return NextResponse.json({
+          schemes:    data,
+          total:      count ?? data.length,
+          page,
+          limit,
+          sources,
+          ministries,
+          categories,
+        });
+      }
+    } catch (err) {
+      console.warn("⚠️ Supabase schemes query failed, using builtin fallback:", err);
     }
-
-    let result = await (await buildQuery(FULL_COLS));
-
-    // If new columns missing, retry with base columns only
-    if (result.error?.message?.includes("column") && result.error.message.includes("does not exist")) {
-      result = await (await buildQuery(BASE_COLS));
-    }
-
-    const { data, error, count } = result;
-    if (error) throw error;
-
-    // Aggregate metadata for filters panel (resilient to missing columns)
-    let sources: string[]    = [];
-    let ministries: string[] = [];
-    let categories: string[] = [];
-
-    const metaFull = await supabaseServer
-      .from("schemes")
-      .select("category, source, ministry")
-      .eq("is_active", true);
-
-    if (metaFull.error?.message?.includes("does not exist")) {
-      // source column missing — fetch without it
-      const metaBase = await supabaseServer
-        .from("schemes")
-        .select("category, ministry")
-        .eq("is_active", true);
-      const rows = metaBase.data ?? [];
-      ministries = [...new Set(rows.map((r) => r.ministry).filter(Boolean))].sort();
-      categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort();
-    } else {
-      const rows = metaFull.data ?? [];
-      sources    = [...new Set(rows.map((r) => r.source).filter(Boolean))].sort();
-      ministries = [...new Set(rows.map((r) => r.ministry).filter(Boolean))].sort();
-      categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort();
-    }
-
-    return NextResponse.json({
-      schemes:    data ?? [],
-      total:      count ?? 0,
-      page,
-      limit,
-      sources,
-      ministries,
-      categories,
-    });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : "Unknown error";
-    console.error("❌ /api/schemes error:", errorMsg);
-    
-    // Check if it's a schema issue
-    if (errorMsg.includes("does not exist")) {
-      return NextResponse.json(
-        {
-          error: "Database schema not initialized",
-          schemes: [],
-          total: 0,
-          hint: "Run: 1) supabase/schema.sql in Supabase Dashboard, 2) python scripts/scrape_schemes.py --source builtin",
-        },
-        { status: 503 }
-      );
-    }
-    
-    return NextResponse.json(
-      {
-        error: errorMsg,
-        schemes: [],
-        total: 0,
-        hint: "Check Supabase connection and schema deployment",
-      },
-      { status: 500 }
-    );
   }
+
+  // Fallback to built-in scheme dataset if Supabase has 0 rows or is unconfigured
+  const fallbackResult = filterBuiltinSchemes({
+    category,
+    ministry,
+    source,
+    stateSpec,
+    q,
+    page,
+    limit,
+  });
+
+  return NextResponse.json(fallbackResult);
 }
