@@ -1,19 +1,20 @@
 # CIVIS AI — Policy Navigator
 
 **A decentralized, multi-agent benefit eligibility network for Indian citizens.**  
-Built on [ZyndAI Protocol](https://zynd.ai) with a Next.js 16 frontend, 8 Python AI agents, Supabase database, and x402 micropayments on Base.
+Built on [ZyndAI Protocol](https://zynd.ai) with a Next.js 16 frontend, 8 Python AI agents deployed on AWS EC2, Supabase database, Web Speech Voice Assistant, n8n workflow engine, and x402 micropayments on Base.
 
 ---
 
 ## 🚀 Live Deployment
 
-| Service | URL |
-|---|---|
-| **Frontend (Vercel)** | [https://policy-navigator-jade.vercel.app](https://policy-navigator-jade.vercel.app) |
-| **Agent API (Railway)** | [https://web-production-dec34.up.railway.app](https://web-production-dec34.up.railway.app) |
-| **Agent Health Check** | [https://web-production-dec34.up.railway.app/health](https://web-production-dec34.up.railway.app/health) |
+| Service | Infrastructure | URL |
+|---|---|---|
+| **Frontend UI** | **Vercel** | [https://policy-navigator-jade.vercel.app](https://policy-navigator-jade.vercel.app) |
+| **Agent API Gateway** | **AWS EC2** | [http://16.16.128.52:5000](http://16.16.128.52:5000) |
+| **Agent Health Check** | **AWS EC2** | [http://16.16.128.52:5000/health](http://16.16.128.52:5000/health) |
+| **n8n Citizen Webhook** | **AWS EC2** | [http://16.16.128.52:5000/webhook](http://16.16.128.52:5000/webhook) |
 
-> The frontend is statically deployed on **Vercel**. The 8 Python AI agents run as a single Railway service via `agents/main.py` supervisor, all inside one container on ports 5000–5007.
+> The frontend is statically deployed on **Vercel**. The 8 Python AI agents and n8n workflow orchestrator run as a unified service on **AWS EC2** via the `agents/main.py` supervisor, listening on ports 5000–5007 (Gateway on Port 5000).
 
 ---
 
@@ -84,7 +85,7 @@ Browser (Next.js 16) — Vercel
       │
       ├─ /api/* (Next.js App Router API routes)
       │       │
-      │       ├─ ──> Orchestrator Agent  (port 5000)  ← Railway public endpoint
+      │       ├─ ──> Orchestrator Agent  (port 5000)  ← AWS EC2 public endpoint (16.16.128.52)
       │       │           │              [n8n/workflows/agent.py]
       │       │           │
       │       │           ├─> Policy Agent      (5001)  scheme database + Supabase
@@ -99,7 +100,7 @@ Browser (Next.js 16) — Vercel
       └─ Supabase (PostgreSQL + RLS)
 ```
 
-**All 8 agents run inside a single Railway service** via `agents/main.py` supervisor. The orchestrator (port 5000) is the Railway public port — sub-agents communicate on `localhost:5001–5007` within the same container. The Vercel frontend calls the Railway public URL for all agent operations.
+**All 8 agents run inside an AWS EC2 instance** via `agents/main.py` supervisor. The orchestrator (port 5000) is exposed on AWS EC2 (`http://16.16.128.52:5000`) — sub-agents communicate on `localhost:5001–5007` internally within the server. The Vercel frontend calls the AWS EC2 public endpoint for all agent operations.
 
 All agents communicate over **HTTP webhook** using the ZyndAI `AgentMessage` protocol. Each agent has its own **DID** registered on the ZyndAI network and can be discovered by other agents.
 
@@ -108,36 +109,54 @@ All agents communicate over **HTTP webhook** using the ZyndAI `AgentMessage` pro
 ## Tech Stack
 
 ### Frontend
-| Package | Version | Purpose |
+| Package / Tech | Version | Purpose |
 |---|---|---|
-| Next.js | 16.1.6 | App Router, SSR, API Routes |
-| React | 19.2.3 | UI framework |
-| TypeScript | 5.x | Type safety across all pages and routes |
-| Tailwind CSS | 4.x | Utility-first styling (`@import "tailwindcss"`) |
-| Lucide React | 0.575.0 | Icon library |
-| @supabase/supabase-js | 2.97.0 | Database client |
+| **Next.js** | 16.1.6 | App Router, SSR, Turbopack, API Proxy Routes |
+| **React** | 19.2.3 | UI Framework |
+| **TypeScript** | 5.x | End-to-end type safety |
+| **Tailwind CSS** | 4.x | Utility-first styling with custom Neo-brutalist theme |
+| **Web Speech API** | Native Browser | Voice Assistant Module (Speech Recognition & Synthesis) |
+| **Lucide React** | 0.575.0 | UI Icon Library |
+| **@supabase/supabase-js** | 2.97.0 | Client & Server Database SDK |
 
-### Backend Agents
-| Package | Purpose |
+### Backend & AI Agents
+| Package / Tech | Version / Layer | Purpose |
+|---|---|---|
+| **Python** | 3.11.x | Core runtime for multi-agent network |
+| **Flask / Gunicorn** | WSGI / HTTP | Webhook server runtime for agents |
+| **ZyndAI SDK** | `zyndai_agent` | Agent DIDs, W3C VCs, inter-agent messaging, x402 middleware |
+| **n8n Engine** | Workflow Agent | Orchestration workflow engine (`n8n/workflows/agent.py`) |
+| **OpenAI API** | GPT Integration | LLM reasoning & dynamic query generation |
+| **supabase-py** | Python DB Client | Direct database queries for Policy & Eligibility agents |
+| **python-dotenv** | 1.x | Environment variable management |
+
+### Database & Persistence
+| Component | Purpose |
 |---|---|
-| `zyndai_agent` | ZyndAI SDK — DID, VC, webhook server, x402 middleware |
-| `python-dotenv` | Environment variable loading |
-| `supabase-py` | Python Supabase client (policy + eligibility agents) |
+| **Supabase (PostgreSQL)** | Persistent storage for citizens, schemes, applications, and credentials |
+| **JSONB Rules Engine** | Flexible schema for complex eligibility rule criteria |
+| **Row Level Security (RLS)** | Granular data security and access control |
 
-### Database
-| Service | Purpose |
-|---|---|
-| Supabase (PostgreSQL) | Citizens, schemes, applications, credentials |
-| Row Level Security (RLS) | Per-row access control |
-
-### Protocol / Identity Layer
+### Protocol, Identity & Payments
 | Technology | Role |
 |---|---|
-| ZyndAI DID | Each agent and citizen gets a Decentralized Identifier |
-| ZyndAI VC | W3C-compliant Verifiable Credential issuance and verification |
-| ZyndAI x402 | Micropayment middleware — HTTP 402 Payment Required on Base network |
-| Base (L2) | USDC micropayments for premium agent features |
-| x402 Protocol | Open standard for HTTP-native blockchain payments |
+| **ZyndAI DID** | Decentralized Identifiers for every agent & citizen profile |
+| **ZyndAI VC** | W3C-compliant Verifiable Credentials for tamper-proof benefit eligibility proof |
+| **ZyndAI x402 Protocol** | Native HTTP 402 Payment Required middleware for AI agent monetization |
+| **Base Network (L2)** | On-chain USDC micropayments for premium Form 16 tax reports |
+
+### Scraping & Data Pipeline
+| Component | File | Purpose |
+|---|---|---|
+| **Scheme Scraper** | `scripts/scrape_schemes.py` | CLI tool to scrape MyScheme / builtin sources & sync directly into Supabase |
+
+### Cloud Infrastructure & Deployment
+| Tier | Provider | Address / Details |
+|---|---|---|
+| **Frontend UI** | **Vercel** | Deployed at `https://policy-navigator-jade.vercel.app` |
+| **Backend Agents & n8n** | **AWS EC2** | Deployed at `http://16.16.128.52:5000` (Ports 5000–5007) |
+| **Database** | **Supabase** | Cloud PostgreSQL (`pfffwfhnvkivrrhrlesv.supabase.co`) |
+| **Containerization** | **Docker** | Production-ready `Dockerfile` & `docker-compose` support |
 
 ---
 
@@ -547,20 +566,19 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 # Agent URLs — use localhost for local dev, Railway URL for production
+# Agent URLs — use localhost for local dev, AWS EC2 URL for production
 # Local development:
 # POLICY_AGENT_URL=http://127.0.0.1:5000
 # APPLY_AGENT_URL=http://127.0.0.1:5005
 # FORM16_AGENT_URL=http://127.0.0.1:5006
 # FORM16_PREMIUM_AGENT_URL=http://127.0.0.1:5007
 
-# Production (Railway):
-POLICY_AGENT_URL=https://your-railway-app.up.railway.app
-APPLY_AGENT_URL=https://your-railway-app.up.railway.app
-FORM16_AGENT_URL=https://your-railway-app.up.railway.app
-FORM16_PREMIUM_AGENT_URL=https://your-railway-app.up.railway.app
-
-# n8n webhook (local n8n):
-# N8N_CITIZEN_WEBHOOK=http://localhost:5678/webhook/citizen-agent
+# Production (AWS EC2 Backend Gateway):
+POLICY_AGENT_URL=http://16.16.128.52:5000
+APPLY_AGENT_URL=http://16.16.128.52:5000
+FORM16_AGENT_URL=http://16.16.128.52:5000
+FORM16_PREMIUM_AGENT_URL=http://16.16.128.52:5000
+N8N_CITIZEN_WEBHOOK=http://16.16.128.52:5000/webhook
 
 # x402 Payment
 PAYMENT_WALLET_ADDRESS=0xYourProjectWalletAddress
@@ -816,13 +834,15 @@ services:
 
 ## Deployment
 
-The project is split across two platforms:
+The project is split across two main cloud environments:
 
-| Service | Platform | URL |
+| Service | Platform | Live Endpoint / Address |
 |---|---|---|
 | Next.js Frontend | **Vercel** | [https://policy-navigator-jade.vercel.app](https://policy-navigator-jade.vercel.app) |
-| All 8 Python Agents | **Railway** | [https://web-production-dec34.up.railway.app](https://web-production-dec34.up.railway.app) |
-| Database | **Supabase** | Managed PostgreSQL |
+| All 8 Python Agents & n8n Orchestrator | **AWS EC2** | [http://16.16.128.52:5000](http://16.16.128.52:5000) |
+| Database | **Supabase** | Managed PostgreSQL (`pfffwfhnvkivrrhrlesv.supabase.co`) |
+
+---
 
 ### Deploy Frontend to Vercel
 
@@ -831,67 +851,106 @@ The project is split across two platforms:
 3. Set **Root Directory** to `web`
 4. Add these **Environment Variables** in the Vercel dashboard:
 
-```
-NEXT_PUBLIC_SUPABASE_URL          = https://your-project.supabase.co
+```env
+NEXT_PUBLIC_SUPABASE_URL          = https://pfffwfhnvkivrrhrlesv.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY     = your_anon_key
-SUPABASE_URL                      = https://your-project.supabase.co
+SUPABASE_URL                      = https://pfffwfhnvkivrrhrlesv.supabase.co
 SUPABASE_SERVICE_ROLE_KEY         = your_service_role_key
-POLICY_AGENT_URL                  = https://your-railway-app.up.railway.app
-APPLY_AGENT_URL                   = https://your-railway-app.up.railway.app
-FORM16_AGENT_URL                  = https://your-railway-app.up.railway.app
-FORM16_PREMIUM_AGENT_URL          = https://your-railway-app.up.railway.app
+POLICY_AGENT_URL                  = http://16.16.128.52:5000
+APPLY_AGENT_URL                   = http://16.16.128.52:5000
+FORM16_AGENT_URL                  = http://16.16.128.52:5000
+FORM16_PREMIUM_AGENT_URL          = http://16.16.128.52:5000
+N8N_CITIZEN_WEBHOOK               = http://16.16.128.52:5000/webhook
 PAYMENT_WALLET_ADDRESS            = 0xYourWallet
 PAYMENT_SECRET                    = your-secret
 BASE_RPC_URL                      = https://mainnet.base.org
 ```
 
-5. Deploy — Vercel will auto-deploy on every push to `main`
+5. Deploy — Vercel will auto-deploy on every push to `main`.
 
-### Deploy Agents to Railway
+---
 
-Railway runs all 8 agents as one service using the `agents/main.py` supervisor. The repo includes both `Dockerfile` and `nixpacks.toml` — Railway will pick the right builder automatically.
+### Deploy Agents to AWS EC2
 
-1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-2. Select `policy-navigator` repository
-3. Railway detects `nixpacks.toml` and builds automatically
-4. Add these **Environment Variables** in Railway service settings:
+The 8 Python agents and orchestrator run as a unified service on **AWS EC2** via `agents/main.py`.
 
-```
-ZYND_API_KEY               = your_zynd_api_key
-SUPABASE_URL               = https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY  = your_service_role_key
-PAYMENT_WALLET_ADDRESS     = 0xYourWallet
-BASE_RPC_URL               = https://mainnet.base.org
-PORT                       = 5000          ← Railway sets this automatically
-```
+#### Option A: Docker on AWS EC2 (Recommended)
 
-5. Railway will launch `python3 agents/main.py` which spawns all 8 agents
-6. The public Railway domain points to port 5000 (the orchestrator)
-7. Internal agents communicate on `localhost:5001–5007` within the same container
+1. Provision an Ubuntu EC2 instance on AWS (e.g. `t3.small` or `t3.medium`).
+2. SSH into your AWS EC2 instance:
+   ```bash
+   ssh -i your-key.pem ubuntu@16.16.128.52
+   ```
+3. Install Docker on EC2 and clone the repository:
+   ```bash
+   sudo apt-get update && sudo apt-get install -y docker.io git
+   git clone https://github.com/XSTRANGER-7/policy-navigator.git
+   cd policy-navigator
+   ```
+4. Build the container:
+   ```bash
+   sudo docker build -t policy-navigator-backend .
+   ```
+5. Run the container bound to host port 5000:
+   ```bash
+   sudo docker run -d -p 5000:5000 \
+     --name policy-agents \
+     --restart always \
+     -e ZYND_API_KEY="your_zynd_api_key" \
+     -e SUPABASE_URL="https://pfffwfhnvkivrrhrlesv.supabase.co" \
+     -e SUPABASE_SERVICE_ROLE_KEY="your_service_role_key" \
+     -e PAYMENT_WALLET_ADDRESS="0xYourWallet" \
+     -e BASE_RPC_URL="https://mainnet.base.org" \
+     policy-navigator-backend
+   ```
+6. Ensure your AWS Security Group permits inbound TCP traffic on **Port 5000**.
 
-### Verify Deployment
+#### Option B: Direct Python Supervisor on AWS EC2
 
-Check agent health:
+1. Install Python 3.11 and virtual environment:
+   ```bash
+   sudo apt update && sudo apt install -y python3.11 python3.11-venv git
+   git clone https://github.com/XSTRANGER-7/policy-navigator.git
+   cd policy-navigator
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+2. Export required environment variables or configure `agents/.env`:
+   ```bash
+   cp agents/.env.example agents/.env
+   # Edit agents/.env with your keys
+   ```
+3. Start supervisor daemon using `nohup` or `systemd`:
+   ```bash
+   nohup python3 agents/main.py > agent.log 2>&1 &
+   ```
+
+---
+
+### Verify AWS EC2 Deployment
+
+Check backend agent health from any terminal:
 ```bash
-curl https://your-railway-app.up.railway.app/health
-# Expected: {"status": "ok", ...}
+curl http://16.16.128.52:5000/health
+# Expected output: {"status": "ok", "service": "civis-agent-orchestrator", ...}
 ```
 
-Check full pipeline from the frontend:
+Check full pipeline connection from the frontend API proxy:
 ```bash
 curl https://policy-navigator-jade.vercel.app/api/agent
-# Expected: {"status": "ok", "agent_url": "https://...railway.app"}
+# Expected: {"status": "ok", "agent_url": "http://16.16.128.52:5000"}
 ```
 
-### Alternate Deployment Targets
+---
 
-The `Procfile` supports **Heroku** or **Render** deployments as well:
+### Alternate Deployment Targets (Railway / Render / Heroku)
+
+The repository also includes `railway.toml`, `nixpacks.toml`, and `Procfile` if you wish to deploy to alternative platforms:
 
 ```
 web: python3 agents/main.py
 ```
-
-If deploying to Render, set the same environment variables as Railway above.
 
 ---
 
@@ -962,16 +1021,7 @@ Open a GitHub Issue with:
 - **Bias detection** — Audit trail on eligibility decisions to detect category-based bias in scheme rules
 - **Aadhaar eKYC bridge** — Link DID to Aadhaar for government-grade verification
 - **Multi-language support** — Hindi, Marathi, Bengali, Tamil UI translations
-- **Scheme scraper** — Automated scraping of MyScheme.gov.in to keep the scheme database fresh
+- **Scheme scraper** — Automated scraping of MyScheme.gov.in (`scripts/scrape_schemes.py`) to keep the scheme database fresh
 - **Agency portal** — Government agency dashboard to publish new schemes and review applications
 - **Docker Compose setup** — One-command `docker compose up` for the full stack locally
 - **CI/CD pipeline** — GitHub Actions for lint, build, and deploy checks on every PR
-
-
-
-
-
-
-
-
-http://localhost:5678/webhook-test/citizen-agent
